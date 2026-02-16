@@ -85,9 +85,13 @@ export async function getOrCreateRoomRole(roomId: string): Promise<JoinRoomResul
         return { ok: false, reason: "full" };
       }
 
-      const { joinedKey, lastSeenKey } = ROLE_FIELDS[role];
-      next[joinedKey] = true;
-      next[lastSeenKey] = now;
+      if (role === "host") {
+        next.hostJoined = true;
+        next.hostLastSeen = now;
+      } else {
+        next.guestJoined = true;
+        next.guestLastSeen = now;
+      }
 
       transaction.set(reference, next, { merge: true });
 
@@ -100,27 +104,21 @@ export async function getOrCreateRoomRole(roomId: string): Promise<JoinRoomResul
 
 export async function heartbeatRoom(roomId: string, role: Role): Promise<void> {
   const now = Date.now();
-  const { joinedKey, lastSeenKey } = ROLE_FIELDS[role];
-  await setDoc(
-    roomDocRef(roomId),
-    {
-      [joinedKey]: true,
-      [lastSeenKey]: now
-    },
-    { merge: true }
-  );
+  if (role === "host") {
+    await setDoc(roomDocRef(roomId), { hostJoined: true, hostLastSeen: now }, { merge: true });
+    return;
+  }
+
+  await setDoc(roomDocRef(roomId), { guestJoined: true, guestLastSeen: now }, { merge: true });
 }
 
 export async function leaveRoom(roomId: string, role: Role): Promise<void> {
-  const { joinedKey, lastSeenKey } = ROLE_FIELDS[role];
-  await setDoc(
-    roomDocRef(roomId),
-    {
-      [joinedKey]: false,
-      [lastSeenKey]: 0
-    },
-    { merge: true }
-  );
+  if (role === "host") {
+    await setDoc(roomDocRef(roomId), { hostJoined: false, hostLastSeen: 0 }, { merge: true });
+    return;
+  }
+
+  await setDoc(roomDocRef(roomId), { guestJoined: false, guestLastSeen: 0 }, { merge: true });
 }
 
 export function subscribeRoom(roomId: string, onUpdate: (room: RoomDoc) => void): Unsubscribe {
@@ -133,4 +131,3 @@ export function subscribeRoom(roomId: string, onUpdate: (room: RoomDoc) => void)
 export function otherRole(role: Role): Role {
   return getOtherRole(role);
 }
-
