@@ -36,37 +36,46 @@ export default function HomePage() {
 
   return (
     <main className="app-shell">
-      <section className="card reveal">
-        <p className="eyebrow">Talky</p>
-        <h1 className="brand">Talkie-walkie web minimaliste</h1>
-        <p className="subtle">2 personnes, un lien secret, maintenir pour parler.</p>
+      <section className="device reveal">
+        <div className="device-top">
+          <span className="device-dot" />
+          <span className="device-dot" />
+          <span className="device-dot" />
+          <span className="device-title">TALKY</span>
+        </div>
+        <div className="device-body">
+          <p className="eyebrow">Talky</p>
+          <h1 className="brand">Talkie-walkie web minimaliste</h1>
+          <p className="subtle">2 personnes, un lien secret, maintenir pour parler.</p>
 
-        <button type="button" className="action-btn" onClick={handleCreateRoom}>
-          Creer une room
-        </button>
+          <div className="grill" aria-hidden="true" />
 
-        <form className="controls" onSubmit={handleJoinRoom}>
-          <label htmlFor="room-id" className="subtle">
-            Rejoindre avec un roomId
-          </label>
-          <input
-            id="room-id"
-            className="text-input"
-            type="text"
-            value={roomInput}
-            onChange={(event) => setRoomInput(event.target.value)}
-            placeholder="Colle le roomId ici"
-            spellCheck={false}
-            autoComplete="off"
-          />
-          <button type="submit" className="ghost-btn" disabled={!canJoin}>
-            Rejoindre
+          <button type="button" className="action-btn" onClick={handleCreateRoom}>
+            Creer une room
           </button>
-        </form>
 
-        {error && <p className="error-line">{error}</p>}
+          <form className="controls" onSubmit={handleJoinRoom}>
+            <label htmlFor="room-id" className="subtle">
+              Rejoindre avec un roomId
+            </label>
+            <input
+              id="room-id"
+              className="text-input"
+              type="text"
+              value={roomInput}
+              onChange={(event) => setRoomInput(event.target.value)}
+              placeholder="Colle le roomId ici"
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button type="submit" className="ghost-btn" disabled={!canJoin}>
+              Rejoindre
+            </button>
+          </form>
+
+          {error && <p className="error-line">{error}</p>}
+        </div>
       </section>
     </main>
   );
 }
-

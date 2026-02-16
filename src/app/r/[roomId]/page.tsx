@@ -722,63 +722,72 @@ export default function RoomPage() {
 
   return (
     <main className="app-shell">
-      <section className="card reveal">
-        <p className="eyebrow">Talky - room</p>
-        <h1 className="brand room-title">{roomId || "room invalide"}</h1>
-        <p className={`status-pill status-${statusClass}`}>{statusLabel}</p>
+      <section className="device reveal">
+        <div className="device-top">
+          <span className={`device-led ${isTransmitting ? "live" : ""}`} />
+          <span className="device-title">TALKY</span>
+          <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
+        </div>
+        <div className="device-body">
+          <p className="eyebrow">Talky - room</p>
+          <h1 className="brand room-title">{roomId || "room invalide"}</h1>
+          <p className={`status-pill status-${statusClass}`}>{statusLabel}</p>
 
-        {joinState === "full" ? (
-          <>
-            <p className="subtle">Room complete: deja 2 personnes.</p>
-            <Link className="ghost-btn link-btn" href="/">
-              Retour
-            </Link>
-          </>
-        ) : (
-          <>
-            <div className="row">
-              <button type="button" className="ghost-btn" onClick={copyLink}>
-                {copied ? "Lien copie" : "Copier le lien"}
-              </button>
+          <div className="grill" aria-hidden="true" />
+
+          {joinState === "full" ? (
+            <>
+              <p className="subtle">Room complete: deja 2 personnes.</p>
               <Link className="ghost-btn link-btn" href="/">
-                Quitter
+                Retour
               </Link>
-            </div>
+            </>
+          ) : (
+            <>
+              <div className="row">
+                <button type="button" className="ghost-btn" onClick={copyLink}>
+                  {copied ? "Lien copie" : "Copier le lien"}
+                </button>
+                <Link className="ghost-btn link-btn" href="/">
+                  Quitter
+                </Link>
+              </div>
 
-            <button
-              type="button"
-              className={`ptt-button ${isTransmitting ? "live" : ""}`}
-              disabled={!canTransmit}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                handlePressStart();
-              }}
-              onPointerUp={(event) => {
-                event.preventDefault();
-                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                  event.currentTarget.releasePointerCapture(event.pointerId);
-                }
-                handlePressEnd();
-              }}
-              onPointerCancel={handlePressEnd}
-              onContextMenu={(event) => event.preventDefault()}
-            >
-              {isTransmitting ? "Parle..." : "Maintenir pour parler"}
-            </button>
+              <button
+                type="button"
+                className={`ptt-button ${isTransmitting ? "live" : ""}`}
+                disabled={!canTransmit}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  handlePressStart();
+                }}
+                onPointerUp={(event) => {
+                  event.preventDefault();
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                  handlePressEnd();
+                }}
+                onPointerCancel={handlePressEnd}
+                onContextMenu={(event) => event.preventDefault()}
+              >
+                {isTransmitting ? "Parle..." : "Maintenir pour parler"}
+              </button>
 
-            <p className="speaker-line">Canal pris par: {channelOwnerLabel}</p>
-            <p className="subtle">Role: {role ?? "..."}</p>
+              <p className="speaker-line">Canal pris par: {channelOwnerLabel}</p>
+              <p className="subtle">Role: {role ?? "..."}</p>
 
-            {!remoteActive && joinState === "ready" && (
-              <p className="subtle">En attente de la deuxieme personne...</p>
-            )}
+              {!remoteActive && joinState === "ready" && (
+                <p className="subtle">En attente de la deuxieme personne...</p>
+              )}
 
-            {busyMessage && <p className="warn-line">{busyMessage}</p>}
-          </>
-        )}
+              {busyMessage && <p className="warn-line">{busyMessage}</p>}
+            </>
+          )}
 
-        {error && <p className="error-line">{error}</p>}
+          {error && <p className="error-line">{error}</p>}
+        </div>
       </section>
 
       <audio ref={remoteAudioRef} autoPlay playsInline />
