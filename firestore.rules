@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomId} {
+      allow read, write: if roomId.matches('^[A-Za-z0-9_-]{22,}$');
+
+      match /{document=**} {
+        allow read, write: if roomId.matches('^[A-Za-z0-9_-]{22,}$');
+      }
+    }
+  }
+}
+
