@@ -718,6 +718,11 @@ export default function RoomPage() {
     return "Autre";
   }, [pttHolder, role]);
 
+  const bothConnected = useMemo(
+    () => joinState === "ready" && role !== null && remoteActive,
+    [joinState, remoteActive, role]
+  );
+
   const statusClass = useMemo(() => statusLabel.toLowerCase().replaceAll(" ", "-"), [statusLabel]);
 
   return (
@@ -725,6 +730,10 @@ export default function RoomPage() {
       <section className="device reveal">
         <div className="device-top">
           <span className={`device-led ${isTransmitting ? "live" : ""}`} />
+          <div className="connection-dots" aria-label="Statut de connexion">
+            <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
+            <span className={`connection-dot ${bothConnected ? "on" : ""}`} />
+          </div>
           <span className="device-title">TALKY</span>
           <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
         </div>
@@ -762,6 +771,9 @@ export default function RoomPage() {
                   event.currentTarget.setPointerCapture(event.pointerId);
                   handlePressStart();
                 }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
                 onPointerUp={(event) => {
                   event.preventDefault();
                   if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -777,6 +789,7 @@ export default function RoomPage() {
 
               <p className="speaker-line">Canal pris par: {channelOwnerLabel}</p>
               <p className="subtle">Role: {role ?? "..."}</p>
+              <p className="subtle">Utilisateurs connectes: {bothConnected ? "2/2" : "1/2"}</p>
 
               {!remoteActive && joinState === "ready" && (
                 <p className="subtle">En attente de la deuxieme personne...</p>

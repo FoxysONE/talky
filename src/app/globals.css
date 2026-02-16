@@ -33,6 +33,8 @@ body {
     radial-gradient(circle at 50% 85%, rgba(64, 12, 140, 0.35), transparent 55%),
     linear-gradient(165deg, var(--bg-top), var(--bg-bottom));
   background-attachment: fixed;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .app-shell {
@@ -91,6 +93,29 @@ body {
 .device-led.live {
   background: rgba(18, 213, 255, 0.9);
   box-shadow: 0 0 12px rgba(18, 213, 255, 0.8);
+}
+
+.connection-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(141, 75, 255, 0.25);
+  background: rgba(14, 9, 24, 0.8);
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(164, 131, 221, 0.25);
+  box-shadow: inset 0 0 3px rgba(6, 4, 12, 0.7);
+}
+
+.connection-dot.on {
+  background: rgba(18, 213, 255, 0.85);
+  box-shadow: 0 0 10px rgba(18, 213, 255, 0.6);
 }
 
 .device-state {
@@ -258,6 +283,9 @@ body {
   font-weight: 700;
   color: #fff;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
   background: radial-gradient(circle at 30% 24%, #c59bff, var(--brand) 62%, #3b1278);
   box-shadow:
     inset 0 -12px 18px rgba(0, 0, 0, 0.24),
