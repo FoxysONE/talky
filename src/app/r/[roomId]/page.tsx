@@ -54,6 +54,9 @@ export default function RoomPage() {
   const remoteRafRef = useRef<number | null>(null);
   const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
   const remoteSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const pttDownAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pttUpAudioRef = useRef<HTMLAudioElement | null>(null);
+  const backgroundLoopRef = useRef<HTMLAudioElement | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const busyTimeoutRef = useRef<number | null>(null);
   const roomUnsubRef = useRef<(() => void) | null>(null);
@@ -87,6 +90,50 @@ export default function RoomPage() {
 
     if (localTrackRef.current) {
       localTrackRef.current.enabled = false;
+    }
+  }, []);
+
+  const ensureSfx = useCallback(() => {
+    if (!pttDownAudioRef.current) {
+      pttDownAudioRef.current = new Audio("/sfx/start.m4a");
+      pttDownAudioRef.current.volume = 0.65;
+    }
+    if (!pttUpAudioRef.current) {
+      pttUpAudioRef.current = new Audio("/sfx/end.flac");
+      pttUpAudioRef.current.volume = 0.65;
+    }
+    if (!backgroundLoopRef.current) {
+      const loop = new Audio("/sfx/crispsound.wav");
+      loop.loop = true;
+      loop.volume = 0.2;
+      backgroundLoopRef.current = loop;
+    }
+  }, []);
+
+  const playSfx = useCallback((audioRef: React.MutableRefObject<HTMLAudioElement | null>) => {
+    if (!audioRef.current) {
+      return;
+    }
+    audioRef.current.currentTime = 0;
+    void audioRef.current.play().catch(() => {
+      // Autoplay can be blocked; ignore.
+    });
+  }, []);
+
+  const startBackgroundLoop = useCallback(() => {
+    ensureSfx();
+    if (!backgroundLoopRef.current) {
+      return;
+    }
+    void backgroundLoopRef.current.play().catch(() => {
+      // Autoplay can be blocked.
+    });
+  }, [ensureSfx]);
+
+  const stopBackgroundLoop = useCallback(() => {
+    if (backgroundLoopRef.current) {
+      backgroundLoopRef.current.pause();
+      backgroundLoopRef.current.currentTime = 0;
     }
   }, []);
 
@@ -175,30 +222,14 @@ export default function RoomPage() {
         setConnectionState(pc.connectionState);
       };
 
-      const offersQuery = query(
-        signalsCollectionRef(roomId),
-        where("from", "==", peerId),
-        where("to", "==", clientIdNow),
-        where("type", "==", "offer")
-      );
-
-      const answersQuery = query(
-        signalsCollectionRef(roomId),
-        where("from", "==", peerId),
-        where("to", "==", clientIdNow),
-        where("type", "==", "answer")
-      );
-
-      const candidatesQuery = query(
-        candidatesCollectionRef(roomId),
-        where("from", "==", peerId),
-        where("to", "==", clientIdNow)
-      );
+      // Use only a single where() to avoid composite index requirements.
+      const signalsQuery = query(signalsCollectionRef(roomId), where("to", "==", clientIdNow));
+      const candidatesQuery = query(candidatesCollectionRef(roomId), where("to", "==", clientIdNow));
 
       const unsubs: Array<() => void> = [];
 
       unsubs.push(
-        onSnapshot(offersQuery, async (snapshot) => {
+        onSnapshot(signalsQuery, async (snapshot) => {
           for (const change of snapshot.docChanges()) {
             if (change.type !== "added") {
               continue;
@@ -209,6 +240,9 @@ export default function RoomPage() {
             signalsSet.add(change.doc.id);
 
             const data = change.doc.data() as SignalDoc & { type: "offer" | "answer" };
+            if (data.from !== peerId || data.type !== "offer") {
+              continue;
+            }
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
               const answer = await pc.createAnswer();
@@ -229,7 +263,7 @@ export default function RoomPage() {
       );
 
       unsubs.push(
-        onSnapshot(answersQuery, async (snapshot) => {
+        onSnapshot(signalsQuery, async (snapshot) => {
           for (const change of snapshot.docChanges()) {
             if (change.type !== "added") {
               continue;
@@ -240,6 +274,9 @@ export default function RoomPage() {
             signalsSet.add(change.doc.id);
 
             const data = change.doc.data() as SignalDoc & { type: "offer" | "answer" };
+            if (data.from !== peerId || data.type !== "answer") {
+              continue;
+            }
             try {
               if (pc.signalingState === "have-local-offer") {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
@@ -264,6 +301,9 @@ export default function RoomPage() {
             candidatesSet.add(change.doc.id);
 
             const data = change.doc.data() as IceCandidateDoc;
+            if (data.from !== peerId) {
+              return;
+            }
             void pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {
               // Ignore stale candidates.
             });
@@ -288,13 +328,13 @@ export default function RoomPage() {
       const pc = createAudioPeerConnection({
         localStream,
         onRemoteStream: (stream) => {
-      let audio = peerAudioRef.current.get(peerId);
-      if (!audio) {
-        audio = new Audio();
-        audio.autoplay = true;
-        (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
-        peerAudioRef.current.set(peerId, audio);
-      }
+          let audio = peerAudioRef.current.get(peerId);
+          if (!audio) {
+            audio = new Audio();
+            audio.autoplay = true;
+            (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+            peerAudioRef.current.set(peerId, audio);
+          }
 
           audio.srcObject = stream;
           void audio.play().catch(() => {
@@ -343,13 +383,17 @@ export default function RoomPage() {
 
     pressingRef.current = true;
     setIsHolding(true);
+    ensureSfx();
+    playSfx(pttDownAudioRef);
     void startTalking();
-  }, [joinState, startTalking]);
+  }, [ensureSfx, joinState, playSfx, startTalking]);
 
   const handlePressEnd = useCallback(() => {
     setIsHolding(false);
+    ensureSfx();
+    playSfx(pttUpAudioRef);
     void stopTalking();
-  }, [stopTalking]);
+  }, [ensureSfx, playSfx, stopTalking]);
 
   const copyLink = useCallback(async () => {
     try {
@@ -370,6 +414,15 @@ export default function RoomPage() {
       void stopTalking();
     }
   }, [isTransmitting, micReady, stopTalking]);
+
+  useEffect(() => {
+    const speaking = isTransmitting || remoteLevel > 0.08;
+    if (speaking) {
+      startBackgroundLoop();
+    } else {
+      stopBackgroundLoop();
+    }
+  }, [isTransmitting, remoteLevel, startBackgroundLoop, stopBackgroundLoop]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -671,6 +724,9 @@ export default function RoomPage() {
         void audioContextRef.current.close();
         audioContextRef.current = null;
       }
+      pttDownAudioRef.current = null;
+      pttUpAudioRef.current = null;
+      backgroundLoopRef.current = null;
       remoteAnalyserRef.current = null;
       remoteSourceRef.current = null;
 
