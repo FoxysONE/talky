@@ -27,7 +27,7 @@ NEXT_PUBLIC_FIREBASE_APP_ID=...
 
 ## 3. Regles Firestore
 
-Regles minimales basees sur un roomId "secret".
+Regles minimales basees sur un PIN a 4 chiffres.
 
 Fichier: `firestore.rules`
 
@@ -36,10 +36,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /rooms/{roomId} {
-      allow read, write: if roomId.matches('^[A-Za-z0-9_-]{22,}$');
+      allow read, write: if roomId.matches('^[0-9]{4}$');
 
       match /{document=**} {
-        allow read, write: if roomId.matches('^[A-Za-z0-9_-]{22,}$');
+        allow read, write: if roomId.matches('^[0-9]{4}$');
       }
     }
   }
@@ -62,7 +62,6 @@ Ajouter les memes variables `NEXT_PUBLIC_FIREBASE_*` dans Vercel.
 
 ## Notes
 
-- Pas d'auth: l'acces se fait par URL de room longue.
+- Pas d'auth: l'acces se fait par PIN 4 chiffres.
 - STUN only: certains reseaux stricts peuvent bloquer la connexion.
 - Pour plus de fiabilite, ajouter un TURN (non inclus).
-

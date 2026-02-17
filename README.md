@@ -11,7 +11,7 @@ Talkie-walkie web ultra minimaliste pour 2 personnes, deployable sur Vercel.
 ## Routes
 
 - `/` creation/rejoindre room
-- `/r/:roomId` session talkie-walkie
+- `/r/:pin` session talkie-walkie (PIN 4 chiffres)
 
 ## Variables d'environnement
 
@@ -59,5 +59,5 @@ firebase deploy --only firestore:rules
 - Maximum strict de 2 participants par room.
 - Mode PTT: maintenir pour parler.
 - Conflit simultane: premier prend le canal.
+- PIN local 4 chiffres (stocke dans le navigateur).
 - STUN only: certains reseaux stricts peuvent bloquer la connexion.
-

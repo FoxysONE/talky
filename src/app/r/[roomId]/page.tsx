@@ -36,6 +36,7 @@ export default function RoomPage() {
     const raw = Array.isArray(rawValue) ? rawValue[0] ?? "" : rawValue ?? "";
     return decodeURIComponent(raw).trim();
   }, [params?.roomId]);
+  const isValidPin = useMemo(() => /^\d{4}$/.test(roomId), [roomId]);
 
   const [role, setRole] = useState<Role | null>(null);
   const [joinState, setJoinState] = useState<JoinState>("joining");
@@ -523,9 +524,9 @@ export default function RoomPage() {
     let cancelled = false;
 
     const setup = async () => {
-      if (!roomId) {
+      if (!roomId || !isValidPin) {
         setJoinState("error");
-        setError("Room invalide.");
+        setError("PIN invalide.");
         return;
       }
 
@@ -761,36 +762,45 @@ export default function RoomPage() {
               </Link>
             </div>
 
-            <div className="ptt-stack">
-              <span className={`device-led ${isTransmitting ? "live" : ""}`} />
-              <button
-                type="button"
-                className={`ptt-button ${isTransmitting ? "live" : ""}`}
-                disabled={!canTransmit}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  handlePressStart();
-                }}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                }}
-                onPointerUp={(event) => {
-                  event.preventDefault();
-                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                  }
-                  handlePressEnd();
-                }}
-                onPointerCancel={handlePressEnd}
-                onContextMenu={(event) => event.preventDefault()}
-              >
-                {isTransmitting ? "Parle..." : "Maintenir pour parler"}
-              </button>
+            <div className="talkie-face">
+              <div className="speaker-grill" aria-hidden="true" />
+              <div className="knob-row" aria-hidden="true">
+                <span className="knob">CH 1</span>
+                <span className="knob">VOL</span>
+                <span className="knob">BAT</span>
+              </div>
+              <div className="ptt-stack">
+                <span className={`device-led ${isTransmitting ? "live" : ""}`} />
+                <button
+                  type="button"
+                  className={`ptt-button ${isTransmitting ? "live" : ""}`}
+                  disabled={!canTransmit}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    handlePressStart();
+                  }}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  onPointerUp={(event) => {
+                    event.preventDefault();
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture(event.pointerId);
+                    }
+                    handlePressEnd();
+                  }}
+                  onPointerCancel={handlePressEnd}
+                  onContextMenu={(event) => event.preventDefault()}
+                >
+                  {isTransmitting ? "Parle..." : "Maintenir pour parler"}
+                </button>
+              </div>
             </div>
 
             <p className="speaker-line">Canal pris par: {channelOwnerLabel}</p>
             <p className="subtle">Role: {role ?? "..."}</p>
+            <p className="subtle">PIN: {roomId}</p>
             <p className="subtle">Utilisateurs connectes: {bothConnected ? "2/2" : "1/2"}</p>
 
             {!remoteActive && joinState === "ready" && (
