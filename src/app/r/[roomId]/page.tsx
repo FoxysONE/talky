@@ -53,7 +53,7 @@ export default function RoomPage() {
   const meterRafRef = useRef<number | null>(null);
   const remoteRafRef = useRef<number | null>(null);
   const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
-  const remoteSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const remoteSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const pttDownAudioRef = useRef<HTMLAudioElement | null>(null);
   const pttUpAudioRef = useRef<HTMLAudioElement | null>(null);
   const backgroundLoopRef = useRef<HTMLAudioElement | null>(null);
@@ -96,16 +96,16 @@ export default function RoomPage() {
   const ensureSfx = useCallback(() => {
     if (!pttDownAudioRef.current) {
       pttDownAudioRef.current = new Audio("/sfx/start.m4a");
-      pttDownAudioRef.current.volume = 0.65;
+      pttDownAudioRef.current.volume = 0.25;
     }
     if (!pttUpAudioRef.current) {
       pttUpAudioRef.current = new Audio("/sfx/end.flac");
-      pttUpAudioRef.current.volume = 0.65;
+      pttUpAudioRef.current.volume = 0.25;
     }
     if (!backgroundLoopRef.current) {
       const loop = new Audio("/sfx/crispsound.wav");
       loop.loop = true;
-      loop.volume = 0.2;
+      loop.volume = 0.08;
       backgroundLoopRef.current = loop;
     }
   }, []);
@@ -193,33 +193,6 @@ export default function RoomPage() {
         void addDoc(candidatesCollectionRef(roomId), payload).catch(() => {
           // Ignore transient write failures.
         });
-      };
-
-      pc.ontrack = (event) => {
-        const [stream] = event.streams;
-        if (!stream) {
-          return;
-        }
-
-        let audio = peerAudioRef.current.get(peerId);
-        if (!audio) {
-          audio = new Audio();
-          audio.autoplay = true;
-          (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
-          peerAudioRef.current.set(peerId, audio);
-        }
-
-        if (!remoteAudioMixRef.current) {
-          remoteAudioMixRef.current = audio;
-        }
-        audio.srcObject = stream;
-        void audio.play().catch(() => {
-          // Autoplay can be blocked; ignore.
-        });
-      };
-
-      pc.onconnectionstatechange = () => {
-        setConnectionState(pc.connectionState);
       };
 
       // Use only a single where() to avoid composite index requirements.
@@ -336,10 +309,54 @@ export default function RoomPage() {
             peerAudioRef.current.set(peerId, audio);
           }
 
+          if (!remoteAudioMixRef.current) {
+            remoteAudioMixRef.current = audio;
+          }
           audio.srcObject = stream;
           void audio.play().catch(() => {
-            // Autoplay can be blocked.
+            // Autoplay can be blocked; will retry on user gesture.
           });
+
+          // Set up remote audio analysis for level metering via MediaStreamSource
+          // (does not interfere with the Audio element playback unlike createMediaElementSource)
+          const ctx = audioContextRef.current;
+          if (ctx && !remoteSourceRef.current) {
+            if (ctx.state === "suspended") {
+              void ctx.resume();
+            }
+            if (!remoteAnalyserRef.current) {
+              const analyser = ctx.createAnalyser();
+              analyser.fftSize = 512;
+              analyser.smoothingTimeConstant = 0.7;
+              remoteAnalyserRef.current = analyser;
+            }
+            try {
+              const source = ctx.createMediaStreamSource(stream);
+              source.connect(remoteAnalyserRef.current);
+              remoteSourceRef.current = source;
+            } catch {
+              // Ignore if source creation fails.
+            }
+
+            // Start remote level metering RAF
+            if (!remoteRafRef.current && remoteAnalyserRef.current) {
+              const analyser = remoteAnalyserRef.current;
+              const data = new Uint8Array(analyser.frequencyBinCount);
+              const tick = () => {
+                analyser.getByteTimeDomainData(data);
+                let sum = 0;
+                for (let i = 0; i < data.length; i += 1) {
+                  const v = (data[i] - 128) / 128;
+                  sum += v * v;
+                }
+                const rms = Math.sqrt(sum / data.length);
+                const next = Math.min(1, Math.max(0, rms * 2.4));
+                setRemoteLevel(next);
+                remoteRafRef.current = window.requestAnimationFrame(tick);
+              };
+              remoteRafRef.current = window.requestAnimationFrame(tick);
+            }
+          }
         },
         onConnectionStateChange: (state) => {
           setConnectionState(state);
@@ -385,6 +402,19 @@ export default function RoomPage() {
     setIsHolding(true);
     ensureSfx();
     playSfx(pttDownAudioRef);
+
+    // Resume AudioContext if suspended (autoplay policy)
+    if (audioContextRef.current?.state === "suspended") {
+      void audioContextRef.current.resume();
+    }
+
+    // Retry playing any remote audio elements blocked by autoplay
+    for (const [, audio] of peerAudioRef.current) {
+      if (audio.paused && audio.srcObject) {
+        void audio.play().catch(() => {});
+      }
+    }
+
     void startTalking();
   }, [ensureSfx, joinState, playSfx, startTalking]);
 
@@ -496,58 +526,6 @@ export default function RoomPage() {
       }
     };
   }, [micReady]);
-
-  useEffect(() => {
-    const audio = remoteAudioMixRef.current;
-    if (!audio) {
-      return;
-    }
-
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
-    }
-
-    const context = audioContextRef.current;
-    if (!remoteAnalyserRef.current) {
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.7;
-      remoteAnalyserRef.current = analyser;
-    }
-
-    if (!remoteSourceRef.current) {
-      const source = context.createMediaElementSource(audio);
-      source.connect(remoteAnalyserRef.current);
-      remoteAnalyserRef.current.connect(context.destination);
-      remoteSourceRef.current = source;
-    }
-
-    const analyser = remoteAnalyserRef.current;
-    const data = new Uint8Array(analyser.frequencyBinCount);
-
-    const tick = () => {
-      analyser.getByteTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 1) {
-        const v = (data[i] - 128) / 128;
-        sum += v * v;
-      }
-      const rms = Math.sqrt(sum / data.length);
-      const next = Math.min(1, Math.max(0, rms * 2.4));
-      setRemoteLevel(next);
-      meterRafRef.current = window.requestAnimationFrame(tick);
-    };
-
-    remoteRafRef.current = window.requestAnimationFrame(tick);
-
-    return () => {
-      // Keep analyser/source for reuse; only stop the RAF.
-      if (remoteRafRef.current !== null) {
-        window.cancelAnimationFrame(remoteRafRef.current);
-        remoteRafRef.current = null;
-      }
-    };
-  }, [participants.length]);
 
   useEffect(() => {
     if (!clientId) {
@@ -771,7 +749,7 @@ export default function RoomPage() {
 
   return (
     <main className="app-shell retro">
-      <header className={`topbar retro-panel ${remoteLevel > 0.08 ? "rx-live" : ""}`}>
+      <header className={`topbar retro-panel ${isTransmitting ? "tx-live" : ""} ${remoteLevel > 0.08 ? "rx-live" : ""}`}>
         <span className="brand-mark">TALKY</span>
         <div className="connection-dots" aria-label="Statut de connexion">
           <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
