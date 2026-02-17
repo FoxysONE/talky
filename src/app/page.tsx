@@ -64,14 +64,14 @@ export default function HomePage() {
     <main className="app-shell retro">
       <header className="topbar retro-panel">
         <span className="brand-mark">TALKY</span>
-        <span className="topbar-sub">RETRO LINK MODE</span>
+        <span className="topbar-sub">v1.0</span>
       </header>
 
       <section className="hero reveal retro-panel">
         <div className="screen">
-          <p className="eyebrow">TALKIE</p>
+          <p className="eyebrow">SIGNAL</p>
           <h1 className="brand">Talky</h1>
-          <p className="subtle">P2P mesh, PIN local 4 chiffres.</p>
+          <p className="subtle">Talkie-walkie P2P, PIN a 4 chiffres.</p>
         </div>
 
         <div className="hero-actions">

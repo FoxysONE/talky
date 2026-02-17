@@ -751,11 +751,15 @@ export default function RoomPage() {
     <main className="app-shell retro">
       <header className={`topbar retro-panel ${isTransmitting ? "tx-live" : ""} ${remoteLevel > 0.08 ? "rx-live" : ""}`}>
         <span className="brand-mark">TALKY</span>
-        <div className="connection-dots" aria-label="Statut de connexion">
-          <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
-          <span className={`connection-dot ${participants.length >= 2 ? "on" : ""}`} />
+        <span className="freq-badge">CH-{roomId}</span>
+        <div className="topbar-right">
+          <div className="connection-dots" aria-label="Participants">
+            {Array.from({ length: MAX_PARTICIPANTS }).map((_, i) => (
+              <span key={i} className={`connection-dot ${i < participants.length ? "on" : ""}`} />
+            ))}
+          </div>
+          <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
         </div>
-        <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
       </header>
 
       <section className="hero reveal retro-panel">
@@ -819,26 +823,45 @@ export default function RoomPage() {
                 >
                   {isTransmitting ? "TX..." : "PTT"}
                 </button>
-                <div
-                  className={`audio-meter ${isTransmitting ? "live" : ""}`}
-                  style={{ "--level": level.toFixed(2) } as React.CSSProperties}
-                >
-                  <span className="audio-meter-fill" />
-                  <span className="audio-meter-scan" />
-                  <div className="audio-meter-bars" aria-hidden="true">
-                    {Array.from({ length: 12 }).map((_, index) => (
-                      <span key={index} className="audio-bar" />
-                    ))}
+                <div className="meters-group">
+                  <div className="meter-row">
+                    <span className="meter-label">TX</span>
+                    <div
+                      className={`audio-meter ${isTransmitting ? "live" : ""}`}
+                      style={{ "--level": level.toFixed(2) } as React.CSSProperties}
+                    >
+                      <span className="audio-meter-fill" />
+                      <span className="audio-meter-scan" />
+                      <div className="audio-meter-bars" aria-hidden="true">
+                        {Array.from({ length: 12 }).map((_, index) => (
+                          <span key={index} className="audio-bar" />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="meter-row">
+                    <span className="meter-label rx">RX</span>
+                    <div
+                      className={`audio-meter ${remoteLevel > 0.08 ? "rx-active" : ""}`}
+                      style={{ "--level": remoteLevel.toFixed(2) } as React.CSSProperties}
+                    >
+                      <span className="audio-meter-fill" />
+                      <span className="audio-meter-scan" />
+                      <div className="audio-meter-bars" aria-hidden="true">
+                        {Array.from({ length: 12 }).map((_, index) => (
+                          <span key={index} className="audio-bar" />
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="stats-grid">
-              <p className="speaker-line">Parole libre</p>
-              <p className="subtle">Participants: {participants.length}/{MAX_PARTICIPANTS}</p>
-              <p className="subtle">PIN: {roomId}</p>
-              <p className="subtle">Connectes: {participants.length}</p>
+            <div className="stats-row">
+              <span className="stat-item">{participants.length}/{MAX_PARTICIPANTS}</span>
+              <span className="stat-sep" />
+              <span className="stat-item">PIN {roomId}</span>
             </div>
 
             {participants.length <= 1 && joinState === "ready" && (
