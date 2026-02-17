@@ -20,6 +20,9 @@ import type { IceCandidateDoc, ParticipantDoc, SignalDoc } from "@/types/rtc";
 type JoinState = "joining" | "ready" | "full" | "error";
 
 const PIN_REGEX = /^\d{4}$/;
+const REMOTE_SPEAKING_THRESHOLD = 0.03;
+const REMOTE_SIGNAL_POLL_MS = 140;
+const REMOTE_LEVEL_SMOOTHING = 0.35;
 
 export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
@@ -51,9 +54,8 @@ export default function RoomPage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterRafRef = useRef<number | null>(null);
-  const remoteRafRef = useRef<number | null>(null);
-  const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
-  const remoteSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const remoteSignalIntervalRef = useRef<number | null>(null);
+  const remotePollInFlightRef = useRef(false);
   const pttDownAudioRef = useRef<HTMLAudioElement | null>(null);
   const pttUpAudioRef = useRef<HTMLAudioElement | null>(null);
   const backgroundLoopRef = useRef<HTMLAudioElement | null>(null);
@@ -67,7 +69,6 @@ export default function RoomPage() {
   const peerSignalsRef = useRef<Map<string, Set<string>>>(new Map());
   const peerAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const offeredPeersRef = useRef<Set<string>>(new Set());
-  const remoteAudioMixRef = useRef<HTMLAudioElement | null>(null);
 
   const setTransientBusyMessage = useCallback((message: string) => {
     setBusyMessage(message);
@@ -163,6 +164,7 @@ export default function RoomPage() {
     peerCandidatesRef.current.clear();
     peerSignalsRef.current.clear();
     offeredPeersRef.current.clear();
+    setRemoteLevel(0);
     setConnectionState("new");
   }, []);
 
@@ -209,9 +211,6 @@ export default function RoomPage() {
           peerAudioRef.current.set(peerId, audio);
         }
 
-        if (!remoteAudioMixRef.current) {
-          remoteAudioMixRef.current = audio;
-        }
         audio.srcObject = stream;
         void audio.play().catch(() => {
           // Autoplay can be blocked; ignore.
@@ -357,6 +356,7 @@ export default function RoomPage() {
     () => joinState === "ready" && clientId !== null && micReady,
     [clientId, joinState, micReady]
   );
+  const remoteSpeaking = remoteLevel > REMOTE_SPEAKING_THRESHOLD;
 
   const startTalking = useCallback(async () => {
     if (!canTransmit || isTransmitting) {
@@ -416,13 +416,13 @@ export default function RoomPage() {
   }, [isTransmitting, micReady, stopTalking]);
 
   useEffect(() => {
-    const speaking = isTransmitting || remoteLevel > 0.08;
+    const speaking = isTransmitting || remoteSpeaking;
     if (speaking) {
       startBackgroundLoop();
     } else {
       stopBackgroundLoop();
     }
-  }, [isTransmitting, remoteLevel, startBackgroundLoop, stopBackgroundLoop]);
+  }, [isTransmitting, remoteSpeaking, startBackgroundLoop, stopBackgroundLoop]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -498,56 +498,84 @@ export default function RoomPage() {
   }, [micReady]);
 
   useEffect(() => {
-    const audio = remoteAudioMixRef.current;
-    if (!audio) {
-      return;
-    }
+    let cancelled = false;
 
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
-    }
-
-    const context = audioContextRef.current;
-    if (!remoteAnalyserRef.current) {
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.7;
-      remoteAnalyserRef.current = analyser;
-    }
-
-    if (!remoteSourceRef.current) {
-      const source = context.createMediaElementSource(audio);
-      source.connect(remoteAnalyserRef.current);
-      remoteAnalyserRef.current.connect(context.destination);
-      remoteSourceRef.current = source;
-    }
-
-    const analyser = remoteAnalyserRef.current;
-    const data = new Uint8Array(analyser.frequencyBinCount);
-
-    const tick = () => {
-      analyser.getByteTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 1) {
-        const v = (data[i] - 128) / 128;
-        sum += v * v;
+    const pollRemoteLevel = async () => {
+      if (remotePollInFlightRef.current) {
+        return;
       }
-      const rms = Math.sqrt(sum / data.length);
-      const next = Math.min(1, Math.max(0, rms * 2.4));
-      setRemoteLevel(next);
-      meterRafRef.current = window.requestAnimationFrame(tick);
+      remotePollInFlightRef.current = true;
+
+      try {
+        let peakLevel = 0;
+
+        for (const pc of peerConnectionsRef.current.values()) {
+          for (const receiver of pc.getReceivers()) {
+            if (receiver.track?.kind !== "audio") {
+              continue;
+            }
+
+            if (typeof receiver.getSynchronizationSources === "function") {
+              const sources = receiver.getSynchronizationSources();
+              for (const source of sources) {
+                if (typeof source.audioLevel === "number") {
+                  peakLevel = Math.max(peakLevel, source.audioLevel);
+                }
+              }
+            }
+
+            try {
+              const stats = await receiver.getStats();
+              stats.forEach((report) => {
+                if (report.type !== "inbound-rtp") {
+                  return;
+                }
+
+                const statsReport = report as RTCInboundRtpStreamStats & {
+                  audioLevel?: number;
+                  kind?: string;
+                  mediaType?: string;
+                };
+                const isAudio = statsReport.kind === "audio" || statsReport.mediaType === "audio";
+                if (!isAudio || typeof statsReport.audioLevel !== "number") {
+                  return;
+                }
+
+                peakLevel = Math.max(peakLevel, statsReport.audioLevel);
+              });
+            } catch {
+              // Stats can fail on closed receivers; ignore.
+            }
+          }
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setRemoteLevel((prev) => {
+          const eased = prev + (peakLevel - prev) * REMOTE_LEVEL_SMOOTHING;
+          return eased < 0.004 ? 0 : eased;
+        });
+      } finally {
+        remotePollInFlightRef.current = false;
+      }
     };
 
-    remoteRafRef.current = window.requestAnimationFrame(tick);
+    void pollRemoteLevel();
+    remoteSignalIntervalRef.current = window.setInterval(() => {
+      void pollRemoteLevel();
+    }, REMOTE_SIGNAL_POLL_MS);
 
     return () => {
-      // Keep analyser/source for reuse; only stop the RAF.
-      if (remoteRafRef.current !== null) {
-        window.cancelAnimationFrame(remoteRafRef.current);
-        remoteRafRef.current = null;
+      cancelled = true;
+      remotePollInFlightRef.current = false;
+      if (remoteSignalIntervalRef.current !== null) {
+        window.clearInterval(remoteSignalIntervalRef.current);
+        remoteSignalIntervalRef.current = null;
       }
     };
-  }, [participants.length]);
+  }, []);
 
   useEffect(() => {
     if (!clientId) {
@@ -708,9 +736,9 @@ export default function RoomPage() {
         window.clearTimeout(busyTimeoutRef.current);
         busyTimeoutRef.current = null;
       }
-      if (remoteRafRef.current !== null) {
-        window.cancelAnimationFrame(remoteRafRef.current);
-        remoteRafRef.current = null;
+      if (remoteSignalIntervalRef.current !== null) {
+        window.clearInterval(remoteSignalIntervalRef.current);
+        remoteSignalIntervalRef.current = null;
       }
 
       if (localStreamRef.current) {
@@ -727,8 +755,7 @@ export default function RoomPage() {
       pttDownAudioRef.current = null;
       pttUpAudioRef.current = null;
       backgroundLoopRef.current = null;
-      remoteAnalyserRef.current = null;
-      remoteSourceRef.current = null;
+      remotePollInFlightRef.current = false;
 
       const activeClientId = clientIdRef.current;
       if (activeClientId) {
@@ -771,7 +798,7 @@ export default function RoomPage() {
 
   return (
     <main className="app-shell retro">
-      <header className={`topbar retro-panel ${remoteLevel > 0.08 ? "rx-live" : ""}`}>
+      <header className={`topbar retro-panel ${remoteSpeaking ? "rx-live" : ""}`}>
         <span className="brand-mark">TALKY</span>
         <div className="connection-dots" aria-label="Statut de connexion">
           <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
@@ -814,6 +841,10 @@ export default function RoomPage() {
               </div>
               <div className="ptt-stack">
                 <span className={`device-led ${isTransmitting ? "live" : ""}`} />
+                <p className={`remote-activity ${remoteSpeaking ? "live" : ""}`}>
+                  <span className={`device-led ${remoteSpeaking ? "live" : ""}`} aria-hidden="true" />
+                  {remoteSpeaking ? "RX actif: voix detectee" : "RX en veille"}
+                </p>
                 <button
                   type="button"
                   className={`ptt-button ${isTransmitting ? "live" : ""}`}
@@ -853,6 +884,13 @@ export default function RoomPage() {
                     ))}
                   </div>
                 </div>
+                <div
+                  className={`audio-meter rx-meter ${remoteSpeaking ? "live" : ""}`}
+                  style={{ "--level": remoteLevel.toFixed(2) } as React.CSSProperties}
+                >
+                  <span className="audio-meter-fill" />
+                  <span className="audio-meter-scan" />
+                </div>
               </div>
             </div>
 
@@ -865,6 +903,9 @@ export default function RoomPage() {
 
             {participants.length <= 1 && joinState === "ready" && (
               <p className="warn-line">Tu es seul pour l'instant, mais tu peux tester le PTT.</p>
+            )}
+            {participants.length > 1 && remoteSpeaking && (
+              <p className="warn-line">Signal distant detecte. Si tu n'entends rien, verifie volume/sortie audio.</p>
             )}
 
             {busyMessage && <p className="warn-line">{busyMessage}</p>}

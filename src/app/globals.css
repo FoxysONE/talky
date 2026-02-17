@@ -394,6 +394,19 @@ body {
   box-shadow: 0 0 10px rgba(110, 231, 255, 0.7);
 }
 
+.rx-meter {
+  width: 170px;
+  height: 12px;
+}
+
+.rx-meter .audio-meter-fill {
+  background: linear-gradient(90deg, rgba(255, 177, 102, 0.4), rgba(18, 213, 255, 0.55));
+}
+
+.rx-meter.live {
+  border-color: rgba(18, 213, 255, 0.5);
+}
+
 .device-led {
   width: 10px;
   height: 10px;
@@ -405,6 +418,27 @@ body {
 .device-led.live {
   background: rgba(18, 213, 255, 0.9);
   box-shadow: 0 0 12px rgba(18, 213, 255, 0.8);
+}
+
+.remote-activity {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(141, 75, 255, 0.35);
+  background: rgba(14, 9, 24, 0.86);
+  color: rgba(164, 131, 221, 0.82);
+}
+
+.remote-activity.live {
+  border-color: rgba(18, 213, 255, 0.65);
+  color: rgba(203, 246, 255, 0.96);
+  box-shadow: 0 0 14px rgba(18, 213, 255, 0.25);
 }
 
 .device-state {
@@ -535,6 +569,11 @@ body {
   .audio-meter {
     width: 140px;
     height: 14px;
+  }
+
+  .rx-meter {
+    width: 140px;
+    height: 10px;
   }
 
   .text-input {
