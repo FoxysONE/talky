@@ -4,7 +4,6 @@
   --ink: #f4edff;
   --ink-soft: #b7a6d9;
   --line: rgba(164, 131, 221, 0.18);
-  --card: rgba(20, 13, 32, 0.92);
   --brand: #8d4bff;
   --brand-dark: #5b21b6;
   --accent: #12d5ff;
@@ -39,102 +38,44 @@ body {
 
 .app-shell {
   min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 36px;
+  padding: 28px clamp(18px, 6vw, 72px) 48px;
+}
+
+.topbar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 20px;
+  gap: 16px;
 }
 
-.device {
-  width: min(600px, 100%);
-  border-radius: 28px;
-  background: linear-gradient(145deg, rgba(33, 20, 52, 0.95), rgba(12, 8, 22, 0.9));
-  border: 1px solid rgba(141, 75, 255, 0.3);
-  box-shadow:
-    0 30px 70px rgba(6, 4, 12, 0.7),
-    0 0 0 1px rgba(141, 75, 255, 0.2),
-    0 0 40px rgba(141, 75, 255, 0.18);
-  overflow: hidden;
-}
-
-.device-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 22px;
-  background: linear-gradient(120deg, rgba(30, 18, 46, 0.95), rgba(12, 8, 24, 0.9));
-  border-bottom: 1px solid rgba(141, 75, 255, 0.25);
-}
-
-.device-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(141, 75, 255, 0.6);
-  box-shadow: 0 0 8px rgba(141, 75, 255, 0.6);
-}
-
-.device-title {
-  margin-left: auto;
-  font-size: 0.72rem;
-  letter-spacing: 0.3em;
+.brand-mark {
+  font-size: 0.85rem;
   font-weight: 700;
+  letter-spacing: 0.35em;
   color: var(--ink-soft);
 }
 
-.device-led {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(164, 131, 221, 0.6);
-  box-shadow: 0 0 10px rgba(141, 75, 255, 0.6);
+.topbar-sub {
+  font-size: 0.85rem;
+  color: rgba(164, 131, 221, 0.7);
 }
 
-.device-led.live {
-  background: rgba(18, 213, 255, 0.9);
-  box-shadow: 0 0 12px rgba(18, 213, 255, 0.8);
+.hero {
+  display: grid;
+  gap: 24px;
+  max-width: 720px;
 }
 
-.connection-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(141, 75, 255, 0.25);
-  background: rgba(14, 9, 24, 0.8);
-}
-
-.connection-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(164, 131, 221, 0.25);
-  box-shadow: inset 0 0 3px rgba(6, 4, 12, 0.7);
-}
-
-.connection-dot.on {
-  background: rgba(18, 213, 255, 0.85);
-  box-shadow: 0 0 10px rgba(18, 213, 255, 0.6);
-}
-
-.device-state {
-  margin-left: auto;
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  font-weight: 700;
-  color: rgba(164, 131, 221, 0.75);
-}
-
-.device-state.live {
-  color: rgba(18, 213, 255, 0.85);
-}
-
-.device-body {
-  padding: 26px;
+.hero-actions {
   display: grid;
   gap: 14px;
-  background: radial-gradient(circle at top, rgba(141, 75, 255, 0.08), transparent 55%);
+}
+
+.room-header {
+  display: grid;
+  gap: 10px;
 }
 
 .reveal {
@@ -271,8 +212,14 @@ body {
   border-color: rgba(255, 107, 107, 0.4);
 }
 
+.ptt-stack {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
 .ptt-button {
-  width: min(230px, 70vw);
+  width: min(240px, 70vw);
   aspect-ratio: 1 / 1;
   justify-self: center;
   border: 0;
@@ -302,6 +249,54 @@ body {
   animation: pulse-live 1.1s ease-in-out infinite;
 }
 
+.device-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(164, 131, 221, 0.6);
+  box-shadow: 0 0 10px rgba(141, 75, 255, 0.6);
+}
+
+.device-led.live {
+  background: rgba(18, 213, 255, 0.9);
+  box-shadow: 0 0 12px rgba(18, 213, 255, 0.8);
+}
+
+.device-state {
+  margin-left: auto;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  font-weight: 700;
+  color: rgba(164, 131, 221, 0.75);
+}
+
+.device-state.live {
+  color: rgba(18, 213, 255, 0.85);
+}
+
+.connection-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(141, 75, 255, 0.25);
+  background: rgba(14, 9, 24, 0.8);
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(164, 131, 221, 0.25);
+  box-shadow: inset 0 0 3px rgba(6, 4, 12, 0.7);
+}
+
+.connection-dot.on {
+  background: rgba(18, 213, 255, 0.85);
+  box-shadow: 0 0 10px rgba(18, 213, 255, 0.6);
+}
+
 .speaker-line,
 .warn-line,
 .error-line {
@@ -319,21 +314,6 @@ body {
 .error-line {
   color: var(--danger);
   font-weight: 600;
-}
-
-.grill {
-  height: 34px;
-  border-radius: 12px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.06),
-      rgba(255, 255, 255, 0.06) 6px,
-      rgba(10, 6, 18, 0.65) 6px,
-      rgba(10, 6, 18, 0.65) 10px
-    );
-  border: 1px solid rgba(141, 75, 255, 0.2);
-  box-shadow: inset 0 0 12px rgba(6, 4, 12, 0.8);
 }
 
 @keyframes rise {
@@ -369,10 +349,6 @@ body {
 }
 
 @media (max-width: 640px) {
-  .device-body {
-    padding: 20px;
-  }
-
   .ptt-button {
     width: min(205px, 74vw);
     font-size: 0.98rem;

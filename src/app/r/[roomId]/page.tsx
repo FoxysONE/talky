@@ -727,41 +727,42 @@ export default function RoomPage() {
 
   return (
     <main className="app-shell">
-      <section className="device reveal">
-        <div className="device-top">
-          <span className={`device-led ${isTransmitting ? "live" : ""}`} />
-          <div className="connection-dots" aria-label="Statut de connexion">
-            <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
-            <span className={`connection-dot ${bothConnected ? "on" : ""}`} />
-          </div>
-          <span className="device-title">TALKY</span>
-          <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
+      <header className="topbar">
+        <span className="brand-mark">TALKY</span>
+        <div className="connection-dots" aria-label="Statut de connexion">
+          <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
+          <span className={`connection-dot ${bothConnected ? "on" : ""}`} />
         </div>
-        <div className="device-body">
+        <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
+      </header>
+
+      <section className="hero reveal">
+        <div className="room-header">
           <p className="eyebrow">Talky - room</p>
           <h1 className="brand room-title">{roomId || "room invalide"}</h1>
           <p className={`status-pill status-${statusClass}`}>{statusLabel}</p>
+        </div>
 
-          <div className="grill" aria-hidden="true" />
-
-          {joinState === "full" ? (
-            <>
-              <p className="subtle">Room complete: deja 2 personnes.</p>
+        {joinState === "full" ? (
+          <>
+            <p className="subtle">Room complete: deja 2 personnes.</p>
+            <Link className="ghost-btn link-btn" href="/">
+              Retour
+            </Link>
+          </>
+        ) : (
+          <>
+            <div className="row">
+              <button type="button" className="ghost-btn" onClick={copyLink}>
+                {copied ? "Lien copie" : "Copier le lien"}
+              </button>
               <Link className="ghost-btn link-btn" href="/">
-                Retour
+                Quitter
               </Link>
-            </>
-          ) : (
-            <>
-              <div className="row">
-                <button type="button" className="ghost-btn" onClick={copyLink}>
-                  {copied ? "Lien copie" : "Copier le lien"}
-                </button>
-                <Link className="ghost-btn link-btn" href="/">
-                  Quitter
-                </Link>
-              </div>
+            </div>
 
+            <div className="ptt-stack">
+              <span className={`device-led ${isTransmitting ? "live" : ""}`} />
               <button
                 type="button"
                 className={`ptt-button ${isTransmitting ? "live" : ""}`}
@@ -786,21 +787,21 @@ export default function RoomPage() {
               >
                 {isTransmitting ? "Parle..." : "Maintenir pour parler"}
               </button>
+            </div>
 
-              <p className="speaker-line">Canal pris par: {channelOwnerLabel}</p>
-              <p className="subtle">Role: {role ?? "..."}</p>
-              <p className="subtle">Utilisateurs connectes: {bothConnected ? "2/2" : "1/2"}</p>
+            <p className="speaker-line">Canal pris par: {channelOwnerLabel}</p>
+            <p className="subtle">Role: {role ?? "..."}</p>
+            <p className="subtle">Utilisateurs connectes: {bothConnected ? "2/2" : "1/2"}</p>
 
-              {!remoteActive && joinState === "ready" && (
-                <p className="subtle">En attente de la deuxieme personne...</p>
-              )}
+            {!remoteActive && joinState === "ready" && (
+              <p className="subtle">En attente de la deuxieme personne...</p>
+            )}
 
-              {busyMessage && <p className="warn-line">{busyMessage}</p>}
-            </>
-          )}
+            {busyMessage && <p className="warn-line">{busyMessage}</p>}
+          </>
+        )}
 
-          {error && <p className="error-line">{error}</p>}
-        </div>
+        {error && <p className="error-line">{error}</p>}
       </section>
 
       <audio ref={remoteAudioRef} autoPlay playsInline />

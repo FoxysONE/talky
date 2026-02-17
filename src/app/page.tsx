@@ -36,20 +36,19 @@ export default function HomePage() {
 
   return (
     <main className="app-shell">
-      <section className="device reveal">
-        <div className="device-top">
-          <span className="device-dot" />
-          <span className="device-dot" />
-          <span className="device-dot" />
-          <span className="device-title">TALKY</span>
-        </div>
-        <div className="device-body">
+      <header className="topbar">
+        <span className="brand-mark">TALKY</span>
+        <span className="topbar-sub">Live 2 personnes</span>
+      </header>
+
+      <section className="hero reveal">
+        <div>
           <p className="eyebrow">Talky</p>
           <h1 className="brand">Talkie-walkie web minimaliste</h1>
           <p className="subtle">2 personnes, un lien secret, maintenir pour parler.</p>
+        </div>
 
-          <div className="grill" aria-hidden="true" />
-
+        <div className="hero-actions">
           <button type="button" className="action-btn" onClick={handleCreateRoom}>
             Creer une room
           </button>
