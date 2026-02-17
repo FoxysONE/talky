@@ -1,32 +1,27 @@
-export type Role = "host" | "guest";
-export type Holder = "none" | Role;
-
 export interface RoomDoc {
   createdAt: number;
-  hostJoined: boolean;
-  guestJoined: boolean;
-  hostLastSeen: number;
-  guestLastSeen: number;
+}
+
+export interface ParticipantDoc {
+  id: string;
+  joinedAt: number;
+  lastSeen: number;
 }
 
 export interface SignalDoc {
+  from: string;
+  to: string;
   sdp: RTCSessionDescriptionInit;
   createdAt: number;
-  sessionId?: string;
 }
 
 export interface IceCandidateDoc {
-  owner: Role;
+  from: string;
+  to: string;
   candidate: RTCIceCandidateInit;
   createdAt: number;
-  sessionId?: string;
 }
 
-export interface PttDoc {
-  holder: Holder;
-  expiresAt: number;
-  updatedAt: number;
-}
-
-export type JoinRoomResult = { ok: true; role: Role } | { ok: false; reason: "full" | "error" };
-
+export type JoinRoomResult =
+  | { ok: true; clientId: string }
+  | { ok: false; reason: "full" | "error" };

@@ -63,5 +63,6 @@ Ajouter les memes variables `NEXT_PUBLIC_FIREBASE_*` dans Vercel.
 ## Notes
 
 - Pas d'auth: l'acces se fait par PIN 4 chiffres.
+- Mesh P2P jusqu'a 4 participants par room.
 - STUN only: certains reseaux stricts peuvent bloquer la connexion.
 - Pour plus de fiabilite, ajouter un TURN (non inclus).

@@ -1,133 +1,139 @@
 import {
   CollectionReference,
   DocumentReference,
-  Unsubscribe,
+  QuerySnapshot,
   collection,
+  deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   runTransaction,
-  setDoc
+  setDoc,
+  query
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
-import type { JoinRoomResult, Role, RoomDoc } from "@/types/rtc";
+import type { JoinRoomResult, ParticipantDoc, RoomDoc } from "@/types/rtc";
 
 export const ROOM_HEARTBEAT_MS = 5_000;
 export const ROOM_STALE_MS = 15_000;
-
-const ROLE_FIELDS: Record<Role, { joinedKey: keyof RoomDoc; lastSeenKey: keyof RoomDoc }> = {
-  host: { joinedKey: "hostJoined", lastSeenKey: "hostLastSeen" },
-  guest: { joinedKey: "guestJoined", lastSeenKey: "guestLastSeen" }
-};
-
-function normalizeRoomDoc(input?: Partial<RoomDoc>): RoomDoc {
-  return {
-    createdAt: typeof input?.createdAt === "number" ? input.createdAt : Date.now(),
-    hostJoined: Boolean(input?.hostJoined),
-    guestJoined: Boolean(input?.guestJoined),
-    hostLastSeen: typeof input?.hostLastSeen === "number" ? input.hostLastSeen : 0,
-    guestLastSeen: typeof input?.guestLastSeen === "number" ? input.guestLastSeen : 0
-  };
-}
+export const MAX_PARTICIPANTS = 4;
 
 export function roomDocRef(roomId: string): DocumentReference {
   return doc(getDb(), "rooms", roomId);
 }
 
-export function signalDocRef(roomId: string, signalType: "offer" | "answer"): DocumentReference {
-  return doc(getDb(), "rooms", roomId, "signals", signalType);
+export function participantsCollectionRef(roomId: string): CollectionReference {
+  return collection(getDb(), "rooms", roomId, "participants");
+}
+
+export function signalsCollectionRef(roomId: string): CollectionReference {
+  return collection(getDb(), "rooms", roomId, "signals");
 }
 
 export function candidatesCollectionRef(roomId: string): CollectionReference {
   return collection(getDb(), "rooms", roomId, "candidates");
 }
 
-export function pttDocRef(roomId: string): DocumentReference {
-  return doc(getDb(), "rooms", roomId, "state", "ptt");
+function normalizeRoomDoc(input?: Partial<RoomDoc>): RoomDoc {
+  return {
+    createdAt: typeof input?.createdAt === "number" ? input.createdAt : Date.now()
+  };
 }
 
-export function isRoleActive(room: RoomDoc, role: Role, now = Date.now()): boolean {
-  const { joinedKey, lastSeenKey } = ROLE_FIELDS[role];
-  const joined = room[joinedKey] as boolean;
-  const lastSeen = room[lastSeenKey] as number;
-  return joined && now - lastSeen <= ROOM_STALE_MS;
+function toParticipant(id: string, data?: Partial<ParticipantDoc>): ParticipantDoc {
+  return {
+    id,
+    joinedAt: typeof data?.joinedAt === "number" ? data.joinedAt : Date.now(),
+    lastSeen: typeof data?.lastSeen === "number" ? data.lastSeen : 0
+  };
 }
 
-function getOtherRole(role: Role): Role {
-  return role === "host" ? "guest" : "host";
+export function isParticipantActive(participant: ParticipantDoc, now = Date.now()): boolean {
+  return now - participant.lastSeen <= ROOM_STALE_MS;
 }
 
-export async function getOrCreateRoomRole(roomId: string): Promise<JoinRoomResult> {
+export async function joinRoom(roomId: string, clientId: string): Promise<JoinRoomResult> {
   try {
     return await runTransaction(getDb(), async (transaction) => {
-      const reference = roomDocRef(roomId);
-      const snapshot = await transaction.get(reference);
+      const roomRef = roomDocRef(roomId);
+      const roomSnap = await transaction.get(roomRef);
       const now = Date.now();
-      const raw = normalizeRoomDoc(snapshot.exists() ? (snapshot.data() as Partial<RoomDoc>) : undefined);
+      const room = normalizeRoomDoc(roomSnap.exists() ? (roomSnap.data() as Partial<RoomDoc>) : undefined);
 
-      const hostIsActive = raw.hostJoined && now - raw.hostLastSeen <= ROOM_STALE_MS;
-      const guestIsActive = raw.guestJoined && now - raw.guestLastSeen <= ROOM_STALE_MS;
+      transaction.set(roomRef, room, { merge: true });
 
-      const next: RoomDoc = {
-        createdAt: raw.createdAt,
-        hostJoined: hostIsActive,
-        guestJoined: guestIsActive,
-        hostLastSeen: hostIsActive ? raw.hostLastSeen : 0,
-        guestLastSeen: guestIsActive ? raw.guestLastSeen : 0
-      };
+      const participantsQuery = query(participantsCollectionRef(roomId));
+      const participantsSnap = (await transaction.get(participantsQuery)) as QuerySnapshot;
 
-      let role: Role | null = null;
+      let activeCount = 0;
+      participantsSnap.forEach((docSnap) => {
+        const participant = toParticipant(docSnap.id, docSnap.data() as Partial<ParticipantDoc>);
+        if (isParticipantActive(participant, now)) {
+          activeCount += 1;
+        }
+      });
 
-      if (!next.hostJoined) {
-        role = "host";
-      } else if (!next.guestJoined) {
-        role = "guest";
-      } else {
+      if (activeCount >= MAX_PARTICIPANTS) {
         return { ok: false, reason: "full" };
       }
 
-      if (role === "host") {
-        next.hostJoined = true;
-        next.hostLastSeen = now;
-      } else {
-        next.guestJoined = true;
-        next.guestLastSeen = now;
-      }
+      const participantRef = doc(participantsCollectionRef(roomId), clientId);
+      transaction.set(
+        participantRef,
+        {
+          joinedAt: now,
+          lastSeen: now
+        },
+        { merge: true }
+      );
 
-      transaction.set(reference, next, { merge: true });
-
-      return { ok: true, role };
+      return { ok: true, clientId };
     });
   } catch {
     return { ok: false, reason: "error" };
   }
 }
 
-export async function heartbeatRoom(roomId: string, role: Role): Promise<void> {
-  const now = Date.now();
-  if (role === "host") {
-    await setDoc(roomDocRef(roomId), { hostJoined: true, hostLastSeen: now }, { merge: true });
-    return;
-  }
-
-  await setDoc(roomDocRef(roomId), { guestJoined: true, guestLastSeen: now }, { merge: true });
+export async function heartbeatParticipant(roomId: string, clientId: string): Promise<void> {
+  await setDoc(
+    doc(participantsCollectionRef(roomId), clientId),
+    {
+      lastSeen: Date.now()
+    },
+    { merge: true }
+  );
 }
 
-export async function leaveRoom(roomId: string, role: Role): Promise<void> {
-  if (role === "host") {
-    await setDoc(roomDocRef(roomId), { hostJoined: false, hostLastSeen: 0 }, { merge: true });
-    return;
-  }
-
-  await setDoc(roomDocRef(roomId), { guestJoined: false, guestLastSeen: 0 }, { merge: true });
+export async function leaveRoom(roomId: string, clientId: string): Promise<void> {
+  await deleteDoc(doc(participantsCollectionRef(roomId), clientId));
 }
 
-export function subscribeRoom(roomId: string, onUpdate: (room: RoomDoc) => void): Unsubscribe {
-  return onSnapshot(roomDocRef(roomId), (snapshot) => {
-    const raw = snapshot.exists() ? (snapshot.data() as Partial<RoomDoc>) : undefined;
-    onUpdate(normalizeRoomDoc(raw));
+export function subscribeParticipants(
+  roomId: string,
+  onUpdate: (participants: ParticipantDoc[]) => void
+): () => void {
+  return onSnapshot(participantsCollectionRef(roomId), (snapshot) => {
+    const now = Date.now();
+    const list: ParticipantDoc[] = [];
+    snapshot.forEach((docSnap) => {
+      const participant = toParticipant(docSnap.id, docSnap.data() as Partial<ParticipantDoc>);
+      if (isParticipantActive(participant, now)) {
+        list.push(participant);
+      }
+    });
+    onUpdate(list);
   });
 }
 
-export function otherRole(role: Role): Role {
-  return getOtherRole(role);
+export async function fetchParticipants(roomId: string): Promise<ParticipantDoc[]> {
+  const snap = await getDocs(participantsCollectionRef(roomId));
+  const now = Date.now();
+  const list: ParticipantDoc[] = [];
+  snap.forEach((docSnap) => {
+    const participant = toParticipant(docSnap.id, docSnap.data() as Partial<ParticipantDoc>);
+    if (isParticipantActive(participant, now)) {
+      list.push(participant);
+    }
+  });
+  return list;
 }

@@ -56,8 +56,7 @@ firebase deploy --only firestore:rules
 
 ## Notes
 
-- Maximum strict de 2 participants par room.
-- Mode PTT: maintenir pour parler.
-- Conflit simultane: premier prend le canal.
+- Maximum strict de 4 participants par room (mesh P2P).
+- Mode PTT: maintenir pour parler (voix melees).
 - PIN local 4 chiffres (stocke dans le navigateur).
 - STUN only: certains reseaux stricts peuvent bloquer la connexion.

@@ -3,31 +3,23 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ensurePttDoc, PTT_HEARTBEAT_MS, refreshPtt, releasePtt, tryAcquirePtt, watchPttState } from "@/lib/ptt";
-import { ROOM_HEARTBEAT_MS, getOrCreateRoomRole, heartbeatRoom, isRoleActive, leaveRoom, otherRole, subscribeRoom } from "@/lib/room";
+import { addDoc, onSnapshot, query, where } from "firebase/firestore";
 import {
-  createAudioPeerConnection,
-  listenForAnswer,
-  listenForOffer,
-  listenForRemoteIceCandidates,
-  publishAnswer,
-  publishIceCandidate,
-  publishOffer,
-  requestMicrophoneStream
-} from "@/lib/webrtc";
-import type { Holder, Role, SignalDoc } from "@/types/rtc";
+  ROOM_HEARTBEAT_MS,
+  MAX_PARTICIPANTS,
+  candidatesCollectionRef,
+  joinRoom,
+  heartbeatParticipant,
+  leaveRoom,
+  signalsCollectionRef,
+  subscribeParticipants
+} from "@/lib/room";
+import { createAudioPeerConnection, requestMicrophoneStream } from "@/lib/webrtc";
+import type { IceCandidateDoc, ParticipantDoc, SignalDoc } from "@/types/rtc";
 
 type JoinState = "joining" | "ready" | "full" | "error";
 
-const FAILED_STATES: RTCPeerConnectionState[] = ["failed", "disconnected", "closed"];
-
-function makeSessionId(): string {
-  return crypto.randomUUID();
-}
-
-function isFailedState(state: RTCPeerConnectionState): boolean {
-  return FAILED_STATES.includes(state);
-}
+const PIN_REGEX = /^\d{4}$/;
 
 export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
@@ -36,13 +28,12 @@ export default function RoomPage() {
     const raw = Array.isArray(rawValue) ? rawValue[0] ?? "" : rawValue ?? "";
     return decodeURIComponent(raw).trim();
   }, [params?.roomId]);
-  const isValidPin = useMemo(() => /^\d{4}$/.test(roomId), [roomId]);
+  const isValidPin = useMemo(() => PIN_REGEX.test(roomId), [roomId]);
 
-  const [role, setRole] = useState<Role | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
   const [joinState, setJoinState] = useState<JoinState>("joining");
+  const [participants, setParticipants] = useState<ParticipantDoc[]>([]);
   const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>("new");
-  const [remoteActive, setRemoteActive] = useState(false);
-  const [pttHolder, setPttHolder] = useState<Holder>("none");
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
   const [micReady, setMicReady] = useState(false);
@@ -50,29 +41,20 @@ export default function RoomPage() {
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const roleRef = useRef<Role | null>(null);
-  const remoteActiveRef = useRef(false);
-  const joiningRef = useRef(false);
+  const clientIdRef = useRef<string | null>(null);
   const pressingRef = useRef(false);
-  const acquiringPttRef = useRef(false);
-  const sessionIdRef = useRef<string | null>(null);
-
   const localStreamRef = useRef<MediaStream | null>(null);
   const localTrackRef = useRef<MediaStreamTrack | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-
   const heartbeatIntervalRef = useRef<number | null>(null);
-  const pttHeartbeatRef = useRef<number | null>(null);
   const busyTimeoutRef = useRef<number | null>(null);
-
   const roomUnsubRef = useRef<(() => void) | null>(null);
-  const pttUnsubRef = useRef<(() => void) | null>(null);
-  const offerUnsubRef = useRef<(() => void) | null>(null);
-  const answerUnsubRef = useRef<(() => void) | null>(null);
-  const candidateUnsubRef = useRef<(() => void) | null>(null);
 
-  const processedCandidateIdsRef = useRef<Set<string>>(new Set());
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const peerUnsubsRef = useRef<Map<string, () => void>>(new Map());
+  const peerCandidatesRef = useRef<Map<string, Set<string>>>(new Map());
+  const peerSignalsRef = useRef<Map<string, Set<string>>>(new Map());
+  const peerAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const offeredPeersRef = useRef<Set<string>>(new Set());
 
   const setTransientBusyMessage = useCallback((message: string) => {
     setBusyMessage(message);
@@ -89,13 +71,8 @@ export default function RoomPage() {
 
   const clearTransmissionState = useCallback(() => {
     pressingRef.current = false;
-    acquiringPttRef.current = false;
+    setIsHolding(false);
     setIsTransmitting(false);
-
-    if (pttHeartbeatRef.current !== null) {
-      window.clearInterval(pttHeartbeatRef.current);
-      pttHeartbeatRef.current = null;
-    }
 
     if (localTrackRef.current) {
       localTrackRef.current.enabled = false;
@@ -103,117 +80,211 @@ export default function RoomPage() {
   }, []);
 
   const stopTalking = useCallback(async () => {
-    const activeRole = roleRef.current;
-    const shouldRelease = pressingRef.current || acquiringPttRef.current || isTransmitting;
     clearTransmissionState();
+  }, [clearTransmissionState]);
 
-    if (!shouldRelease || !activeRole) {
-      return;
+  const closePeerConnections = useCallback(() => {
+    for (const [, pc] of peerConnectionsRef.current.entries()) {
+      pc.onicecandidate = null;
+      pc.ontrack = null;
+      pc.onconnectionstatechange = null;
+      pc.close();
     }
+    peerConnectionsRef.current.clear();
 
-    try {
-      await releasePtt(roomId, activeRole);
-    } catch {
-      // Network races can happen during tab close; ignore.
+    for (const [, unsub] of peerUnsubsRef.current.entries()) {
+      unsub();
     }
-  }, [clearTransmissionState, isTransmitting, roomId]);
+    peerUnsubsRef.current.clear();
 
-  const closePeerConnection = useCallback(() => {
-    if (answerUnsubRef.current) {
-      answerUnsubRef.current();
-      answerUnsubRef.current = null;
+    for (const [, audio] of peerAudioRef.current.entries()) {
+      audio.srcObject = null;
     }
+    peerAudioRef.current.clear();
 
-    if (candidateUnsubRef.current) {
-      candidateUnsubRef.current();
-      candidateUnsubRef.current = null;
-    }
-
-    processedCandidateIdsRef.current.clear();
-
-    const activePc = peerConnectionRef.current;
-    if (activePc) {
-      activePc.onicecandidate = null;
-      activePc.ontrack = null;
-      activePc.onconnectionstatechange = null;
-      activePc.close();
-      peerConnectionRef.current = null;
-    }
-
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-    }
-
+    peerCandidatesRef.current.clear();
+    peerSignalsRef.current.clear();
+    offeredPeersRef.current.clear();
     setConnectionState("new");
-    sessionIdRef.current = null;
   }, []);
 
-  const attachRemoteCandidateListener = useCallback(
-    (sessionId: string) => {
-      if (candidateUnsubRef.current) {
-        candidateUnsubRef.current();
-        candidateUnsubRef.current = null;
-      }
-
-      processedCandidateIdsRef.current.clear();
-
-      const activeRole = roleRef.current;
-      if (!activeRole) {
+  const attachPeerListeners = useCallback(
+    (peerId: string, pc: RTCPeerConnection) => {
+      const clientIdNow = clientIdRef.current;
+      if (!clientIdNow) {
         return;
       }
 
-      const remoteRole = otherRole(activeRole);
-      candidateUnsubRef.current = listenForRemoteIceCandidates(roomId, remoteRole, async (payload, candidateId) => {
-        if (processedCandidateIdsRef.current.has(candidateId)) {
+      const candidatesSet = new Set<string>();
+      peerCandidatesRef.current.set(peerId, candidatesSet);
+      const signalsSet = new Set<string>();
+      peerSignalsRef.current.set(peerId, signalsSet);
+
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) {
           return;
         }
 
-        processedCandidateIdsRef.current.add(candidateId);
+        const payload: IceCandidateDoc = {
+          from: clientIdNow,
+          to: peerId,
+          candidate: event.candidate.toJSON(),
+          createdAt: Date.now()
+        };
 
-        if (payload.sessionId && payload.sessionId !== sessionIdRef.current) {
+        void addDoc(candidatesCollectionRef(roomId), payload).catch(() => {
+          // Ignore transient write failures.
+        });
+      };
+
+      pc.ontrack = (event) => {
+        const [stream] = event.streams;
+        if (!stream) {
           return;
         }
 
-        const activePc = peerConnectionRef.current;
-        if (!activePc) {
-          return;
+        let audio = peerAudioRef.current.get(peerId);
+        if (!audio) {
+          audio = new Audio();
+          audio.autoplay = true;
+          audio.playsInline = true;
+          peerAudioRef.current.set(peerId, audio);
         }
 
-        try {
-          await activePc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-        } catch {
-          // Ignore stale candidates after reconnect.
-        }
+        audio.srcObject = stream;
+        void audio.play().catch(() => {
+          // Autoplay can be blocked; ignore.
+        });
+      };
+
+      pc.onconnectionstatechange = () => {
+        setConnectionState(pc.connectionState);
+      };
+
+      const offersQuery = query(
+        signalsCollectionRef(roomId),
+        where("from", "==", peerId),
+        where("to", "==", clientIdNow),
+        where("type", "==", "offer")
+      );
+
+      const answersQuery = query(
+        signalsCollectionRef(roomId),
+        where("from", "==", peerId),
+        where("to", "==", clientIdNow),
+        where("type", "==", "answer")
+      );
+
+      const candidatesQuery = query(
+        candidatesCollectionRef(roomId),
+        where("from", "==", peerId),
+        where("to", "==", clientIdNow)
+      );
+
+      const unsubs: Array<() => void> = [];
+
+      unsubs.push(
+        onSnapshot(offersQuery, async (snapshot) => {
+          for (const change of snapshot.docChanges()) {
+            if (change.type !== "added") {
+              continue;
+            }
+            if (signalsSet.has(change.doc.id)) {
+              continue;
+            }
+            signalsSet.add(change.doc.id);
+
+            const data = change.doc.data() as SignalDoc & { type: "offer" | "answer" };
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+
+              await addDoc(signalsCollectionRef(roomId), {
+                from: clientIdNow,
+                to: peerId,
+                type: "answer",
+                sdp: answer,
+                createdAt: Date.now()
+              });
+            } catch {
+              // Ignore stale offers.
+            }
+          }
+        })
+      );
+
+      unsubs.push(
+        onSnapshot(answersQuery, async (snapshot) => {
+          for (const change of snapshot.docChanges()) {
+            if (change.type !== "added") {
+              continue;
+            }
+            if (signalsSet.has(change.doc.id)) {
+              continue;
+            }
+            signalsSet.add(change.doc.id);
+
+            const data = change.doc.data() as SignalDoc & { type: "offer" | "answer" };
+            try {
+              if (pc.signalingState === "have-local-offer") {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+              }
+            } catch {
+              // Ignore stale answers.
+            }
+          }
+        })
+      );
+
+      unsubs.push(
+        onSnapshot(candidatesQuery, (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type !== "added") {
+              return;
+            }
+
+            if (candidatesSet.has(change.doc.id)) {
+              return;
+            }
+            candidatesSet.add(change.doc.id);
+
+            const data = change.doc.data() as IceCandidateDoc;
+            void pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {
+              // Ignore stale candidates.
+            });
+          });
+        })
+      );
+
+      peerUnsubsRef.current.set(peerId, () => {
+        unsubs.forEach((unsub) => unsub());
       });
-
-      sessionIdRef.current = sessionId;
     },
     [roomId]
   );
 
-  const createSessionPeerConnection = useCallback(
-    (sessionId: string): RTCPeerConnection => {
+  const createPeerConnection = useCallback(
+    (peerId: string): RTCPeerConnection => {
       const localStream = localStreamRef.current;
       if (!localStream) {
         throw new Error("Flux micro indisponible.");
       }
 
-      closePeerConnection();
-
       const pc = createAudioPeerConnection({
         localStream,
         onRemoteStream: (stream) => {
-          const audioEl = remoteAudioRef.current;
-          if (!audioEl) {
-            return;
+          let audio = peerAudioRef.current.get(peerId);
+          if (!audio) {
+            audio = new Audio();
+            audio.autoplay = true;
+            audio.playsInline = true;
+            peerAudioRef.current.set(peerId, audio);
           }
 
-          if (audioEl.srcObject !== stream) {
-            audioEl.srcObject = stream;
-          }
-
-          void audioEl.play().catch(() => {
-            // Some browsers require another user interaction.
+          audio.srcObject = stream;
+          void audio.play().catch(() => {
+            // Autoplay can be blocked.
           });
         },
         onConnectionStateChange: (state) => {
@@ -221,171 +292,38 @@ export default function RoomPage() {
         }
       });
 
-      pc.onicecandidate = (event) => {
-        const activeRole = roleRef.current;
-        if (!event.candidate || !activeRole) {
-          return;
-        }
-
-        void publishIceCandidate(roomId, activeRole, sessionId, event.candidate.toJSON()).catch(() => {
-          // Ignore transient write failures.
-        });
-      };
-
-      peerConnectionRef.current = pc;
-      setConnectionState(pc.connectionState);
-      attachRemoteCandidateListener(sessionId);
+      attachPeerListeners(peerId, pc);
+      peerConnectionsRef.current.set(peerId, pc);
       return pc;
     },
-    [attachRemoteCandidateListener, closePeerConnection, roomId]
+    [attachPeerListeners]
   );
 
-  const startHostSession = useCallback(async () => {
-    if (joiningRef.current || roleRef.current !== "host" || !remoteActiveRef.current) {
-      return;
-    }
-
-    if (!localStreamRef.current) {
-      return;
-    }
-
-    joiningRef.current = true;
-
-    try {
-      const sessionId = makeSessionId();
-      const pc = createSessionPeerConnection(sessionId);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      await publishOffer(roomId, { sdp: offer, createdAt: Date.now(), sessionId });
-
-      if (answerUnsubRef.current) {
-        answerUnsubRef.current();
-        answerUnsubRef.current = null;
-      }
-
-      answerUnsubRef.current = listenForAnswer(roomId, async (answer) => {
-        const activePc = peerConnectionRef.current;
-        if (!activePc) {
-          return;
-        }
-
-        if (answer.sessionId && answer.sessionId !== sessionIdRef.current) {
-          return;
-        }
-
-        if (activePc.signalingState !== "have-local-offer") {
-          return;
-        }
-
-        try {
-          await activePc.setRemoteDescription(new RTCSessionDescription(answer.sdp));
-        } catch {
-          // Ignore stale answers after a new session starts.
-        }
-      });
-    } catch {
-      setError("Impossible d'etablir la connexion audio.");
-    } finally {
-      joiningRef.current = false;
-    }
-  }, [createSessionPeerConnection, roomId]);
-
-  const startGuestSession = useCallback(
-    async (offer: SignalDoc) => {
-      if (joiningRef.current || roleRef.current !== "guest") {
-        return;
-      }
-
-      if (!localStreamRef.current) {
-        return;
-      }
-
-      const sessionId = offer.sessionId ?? "default";
-      const activePc = peerConnectionRef.current;
-      if (
-        sessionIdRef.current === sessionId &&
-        activePc &&
-        !isFailedState(activePc.connectionState) &&
-        activePc.connectionState !== "closed"
-      ) {
-        return;
-      }
-
-      joiningRef.current = true;
-
-      try {
-        const pc = createSessionPeerConnection(sessionId);
-        await pc.setRemoteDescription(new RTCSessionDescription(offer.sdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await publishAnswer(roomId, { sdp: answer, createdAt: Date.now(), sessionId });
-      } catch {
-        setError("Impossible de rejoindre la connexion audio.");
-      } finally {
-        joiningRef.current = false;
-      }
-    },
-    [createSessionPeerConnection, roomId]
+  const canTransmit = useMemo(
+    () => joinState === "ready" && clientId !== null && micReady,
+    [clientId, joinState, micReady]
   );
-
-  const canTransmit = useMemo(() => joinState === "ready" && role !== null && micReady, [joinState, micReady, role]);
 
   const startTalking = useCallback(async () => {
-    if (!canTransmit || acquiringPttRef.current || isTransmitting) {
+    if (!canTransmit || isTransmitting) {
       return;
     }
 
-    const activeRole = roleRef.current;
-    if (!activeRole || !localTrackRef.current) {
+    if (!localTrackRef.current) {
       return;
     }
 
-    acquiringPttRef.current = true;
-
-    try {
-      const hasLock = await tryAcquirePtt(roomId, activeRole);
-      acquiringPttRef.current = false;
-
-      if (!hasLock) {
-        setTransientBusyMessage("Canal occupe");
-        return;
-      }
-
-      if (!pressingRef.current) {
-        await releasePtt(roomId, activeRole);
-        return;
-      }
-
-      localTrackRef.current.enabled = true;
-      setIsTransmitting(true);
-      setBusyMessage(null);
-
-      if (pttHeartbeatRef.current !== null) {
-        window.clearInterval(pttHeartbeatRef.current);
-      }
-
-      pttHeartbeatRef.current = window.setInterval(() => {
-        const roleNow = roleRef.current;
-        if (!roleNow) {
-          return;
-        }
-
-        void refreshPtt(roomId, roleNow).catch(() => {
-          // Ignore heartbeat failures; lock TTL will recover.
-        });
-      }, PTT_HEARTBEAT_MS);
-    } catch {
-      acquiringPttRef.current = false;
-      setTransientBusyMessage("Verrou PTT indisponible");
-    }
-  }, [canTransmit, isTransmitting, roomId, setTransientBusyMessage]);
+    localTrackRef.current.enabled = true;
+    setIsTransmitting(true);
+    setBusyMessage(null);
+  }, [canTransmit, isTransmitting]);
 
   const handlePressStart = useCallback(() => {
     if (joinState !== "ready") {
       return;
     }
 
-    if (pressingRef.current || acquiringPttRef.current) {
+    if (pressingRef.current) {
       return;
     }
 
@@ -410,22 +348,8 @@ export default function RoomPage() {
   }, []);
 
   useEffect(() => {
-    roleRef.current = role;
-  }, [role]);
-
-  useEffect(() => {
-    remoteActiveRef.current = remoteActive;
-  }, [remoteActive]);
-
-  useEffect(() => {
-    if (!role) {
-      return;
-    }
-
-    if (pttHolder !== role && isTransmitting) {
-      void stopTalking();
-    }
-  }, [isTransmitting, pttHolder, role, stopTalking]);
+    clientIdRef.current = clientId;
+  }, [clientId]);
 
   useEffect(() => {
     if (isTransmitting && !micReady) {
@@ -462,68 +386,48 @@ export default function RoomPage() {
   }, [handlePressEnd, handlePressStart]);
 
   useEffect(() => {
-    if (role !== "host") {
+    if (!clientId) {
       return;
     }
 
-    if (!remoteActive) {
-      if (peerConnectionRef.current) {
-        closePeerConnection();
+    const activePeers = participants.filter((participant) => participant.id !== clientId).map((p) => p.id);
+
+    for (const peerId of activePeers) {
+      if (peerConnectionsRef.current.has(peerId)) {
+        continue;
       }
 
-      return;
-    }
-
-    const activePc = peerConnectionRef.current;
-    const needsSession = !activePc || isFailedState(activePc.connectionState);
-    if (!needsSession) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      void startHostSession();
-    }, 350);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [closePeerConnection, connectionState, remoteActive, role, startHostSession]);
-
-  useEffect(() => {
-    if (role !== "guest") {
-      return;
-    }
-
-    if (offerUnsubRef.current) {
-      offerUnsubRef.current();
-      offerUnsubRef.current = null;
-    }
-
-    offerUnsubRef.current = listenForOffer(roomId, (offer) => {
-      if (!remoteActiveRef.current) {
-        return;
+      const pc = createPeerConnection(peerId);
+      if (clientId < peerId && !offeredPeersRef.current.has(peerId)) {
+        offeredPeersRef.current.add(peerId);
+        void (async () => {
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await addDoc(signalsCollectionRef(roomId), {
+              from: clientId,
+              to: peerId,
+              type: "offer",
+              sdp: offer,
+              createdAt: Date.now()
+            });
+          } catch {
+            setTransientBusyMessage("Connexion audio impossible.");
+          }
+        })();
       }
+    }
 
-      void startGuestSession(offer);
-    });
-
-    return () => {
-      if (offerUnsubRef.current) {
-        offerUnsubRef.current();
-        offerUnsubRef.current = null;
+    for (const peerId of peerConnectionsRef.current.keys()) {
+      if (!activePeers.includes(peerId)) {
+        const pc = peerConnectionsRef.current.get(peerId);
+        if (pc) {
+          pc.close();
+        }
+        peerConnectionsRef.current.delete(peerId);
       }
-    };
-  }, [role, roomId, startGuestSession]);
-
-  useEffect(() => {
-    if (role !== "guest" || remoteActive) {
-      return;
     }
-
-    if (peerConnectionRef.current) {
-      closePeerConnection();
-    }
-  }, [closePeerConnection, remoteActive, role]);
+  }, [clientId, createPeerConnection, participants, roomId, setTransientBusyMessage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -536,7 +440,11 @@ export default function RoomPage() {
       }
 
       try {
-        const join = await getOrCreateRoomRole(roomId);
+        const storedId = window.localStorage.getItem("talky_client_id");
+        const newId = storedId && storedId.length > 6 ? storedId : crypto.randomUUID();
+        window.localStorage.setItem("talky_client_id", newId);
+
+        const join = await joinRoom(roomId, newId);
         if (cancelled) {
           return;
         }
@@ -551,6 +459,8 @@ export default function RoomPage() {
           }
           return;
         }
+
+        setClientId(newId);
 
         const micStream = await requestMicrophoneStream();
         if (cancelled) {
@@ -568,44 +478,24 @@ export default function RoomPage() {
         localTrackRef.current = micTrack;
         setMicReady(true);
 
-        roleRef.current = join.role;
-        setRole(join.role);
         setJoinState("ready");
         setError(null);
 
-        await ensurePttDoc(roomId);
-        if (cancelled) {
-          return;
-        }
-
-        pttUnsubRef.current = watchPttState(roomId, (pttState) => {
+        const unsub = subscribeParticipants(roomId, (list) => {
           if (!cancelled) {
-            setPttHolder(pttState.holder);
+            setParticipants(list);
           }
         });
+        roomUnsubRef.current = unsub;
 
-        roomUnsubRef.current = subscribeRoom(roomId, (room) => {
-          if (cancelled || !roleRef.current) {
-            return;
-          }
-
-          const targetRole = otherRole(roleRef.current);
-          setRemoteActive(isRoleActive(room, targetRole));
-        });
-
-        await heartbeatRoom(roomId, join.role);
+        await heartbeatParticipant(roomId, newId);
         if (cancelled) {
           return;
         }
 
         heartbeatIntervalRef.current = window.setInterval(() => {
-          const activeRole = roleRef.current;
-          if (!activeRole) {
-            return;
-          }
-
-          void heartbeatRoom(roomId, activeRole).catch(() => {
-            // Keep retrying on next heartbeat.
+          void heartbeatParticipant(roomId, newId).catch(() => {
+            // Retry on next heartbeat.
           });
         }, ROOM_HEARTBEAT_MS);
       } catch {
@@ -615,16 +505,12 @@ export default function RoomPage() {
     };
 
     const beforeUnload = () => {
-      const activeRole = roleRef.current;
-      if (!activeRole) {
+      const activeClientId = clientIdRef.current;
+      if (!activeClientId) {
         return;
       }
 
-      void releasePtt(roomId, activeRole).catch(() => {
-        // Best effort.
-      });
-
-      void leaveRoom(roomId, activeRole).catch(() => {
+      void leaveRoom(roomId, activeClientId).catch(() => {
         // Best effort.
       });
     };
@@ -637,21 +523,11 @@ export default function RoomPage() {
       window.removeEventListener("beforeunload", beforeUnload);
 
       void stopTalking();
-      closePeerConnection();
+      closePeerConnections();
 
       if (roomUnsubRef.current) {
         roomUnsubRef.current();
         roomUnsubRef.current = null;
-      }
-
-      if (pttUnsubRef.current) {
-        pttUnsubRef.current();
-        pttUnsubRef.current = null;
-      }
-
-      if (offerUnsubRef.current) {
-        offerUnsubRef.current();
-        offerUnsubRef.current = null;
       }
 
       if (heartbeatIntervalRef.current !== null) {
@@ -672,14 +548,14 @@ export default function RoomPage() {
       }
       localTrackRef.current = null;
 
-      const activeRole = roleRef.current;
-      if (activeRole) {
-        void leaveRoom(roomId, activeRole).catch(() => {
+      const activeClientId = clientIdRef.current;
+      if (activeClientId) {
+        void leaveRoom(roomId, activeClientId).catch(() => {
           // Best effort.
         });
       }
     };
-  }, [closePeerConnection, roomId, stopTalking]);
+  }, [closePeerConnections, isValidPin, roomId, stopTalking]);
 
   const statusLabel = useMemo(() => {
     if (joinState === "joining") {
@@ -694,41 +570,20 @@ export default function RoomPage() {
       return "Erreur";
     }
 
-    if (!remoteActive) {
+    if (participants.length <= 1) {
       return "En attente";
     }
 
     if (connectionState === "connected") {
-      return pttHolder !== "none" && pttHolder !== role ? "Occupe" : "Connecte";
+      return "Connecte";
     }
 
     if (connectionState === "connecting" || connectionState === "new") {
       return "Connexion";
     }
 
-    if (isFailedState(connectionState)) {
-      return "Reconnexion";
-    }
-
     return "Connexion";
-  }, [connectionState, joinState, pttHolder, remoteActive, role]);
-
-  const channelOwnerLabel = useMemo(() => {
-    if (pttHolder === "none") {
-      return "Personne";
-    }
-
-    if (pttHolder === role) {
-      return "Moi";
-    }
-
-    return "Autre";
-  }, [pttHolder, role]);
-
-  const bothConnected = useMemo(
-    () => joinState === "ready" && role !== null && remoteActive,
-    [joinState, remoteActive, role]
-  );
+  }, [connectionState, joinState, participants.length]);
 
   const statusClass = useMemo(() => statusLabel.toLowerCase().replaceAll(" ", "-"), [statusLabel]);
 
@@ -738,7 +593,7 @@ export default function RoomPage() {
         <span className="brand-mark">TALKY</span>
         <div className="connection-dots" aria-label="Statut de connexion">
           <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
-          <span className={`connection-dot ${bothConnected ? "on" : ""}`} />
+          <span className={`connection-dot ${participants.length >= 2 ? "on" : ""}`} />
         </div>
         <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
       </header>
@@ -752,7 +607,7 @@ export default function RoomPage() {
 
         {joinState === "full" ? (
           <>
-            <p className="subtle">Room complete: deja 2 personnes.</p>
+            <p className="subtle">Room complete: deja {MAX_PARTICIPANTS} personnes.</p>
             <Link className="ghost-btn link-btn" href="/">
               Retour
             </Link>
@@ -807,16 +662,13 @@ export default function RoomPage() {
               </div>
             </div>
 
-            <p className="speaker-line">Canal pris par: {channelOwnerLabel}</p>
-            <p className="subtle">Role: {role ?? "..."}</p>
+            <p className="speaker-line">Parole libre (mix voix)</p>
+            <p className="subtle">Participants: {participants.length}/{MAX_PARTICIPANTS}</p>
             <p className="subtle">PIN: {roomId}</p>
-            <p className="subtle">Utilisateurs connectes: {bothConnected ? "2/2" : "1/2"}</p>
-            {!remoteActive && joinState === "ready" && (
-              <p className="warn-line">Tu es seul pour l'instant, mais tu peux tester le PTT.</p>
-            )}
+            <p className="subtle">Utilisateurs connectes: {participants.length}</p>
 
-            {!remoteActive && joinState === "ready" && (
-              <p className="subtle">En attente de la deuxieme personne...</p>
+            {participants.length <= 1 && joinState === "ready" && (
+              <p className="warn-line">Tu es seul pour l'instant, mais tu peux tester le PTT.</p>
             )}
 
             {busyMessage && <p className="warn-line">{busyMessage}</p>}
@@ -825,8 +677,6 @@ export default function RoomPage() {
 
         {error && <p className="error-line">{error}</p>}
       </section>
-
-      <audio ref={remoteAudioRef} autoPlay playsInline />
     </main>
   );
 }
