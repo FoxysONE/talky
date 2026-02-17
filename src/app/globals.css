@@ -163,6 +163,11 @@ body {
   flex-wrap: wrap;
 }
 
+.hold-lock {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
 .text-input {
   width: 100%;
   border: 1px solid var(--line);

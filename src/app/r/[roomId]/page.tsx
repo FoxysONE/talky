@@ -44,6 +44,7 @@ export default function RoomPage() {
   const [remoteActive, setRemoteActive] = useState(false);
   const [pttHolder, setPttHolder] = useState<Holder>("none");
   const [isTransmitting, setIsTransmitting] = useState(false);
+  const [isHolding, setIsHolding] = useState(false);
   const [micReady, setMicReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -384,11 +385,17 @@ export default function RoomPage() {
       return;
     }
 
+    if (pressingRef.current || acquiringPttRef.current) {
+      return;
+    }
+
     pressingRef.current = true;
+    setIsHolding(true);
     void startTalking();
   }, [joinState, startTalking]);
 
   const handlePressEnd = useCallback(() => {
+    setIsHolding(false);
     void stopTalking();
   }, [stopTalking]);
 
@@ -752,7 +759,7 @@ export default function RoomPage() {
           </>
         ) : (
           <>
-            <div className="row">
+            <div className={`row ${isHolding ? "hold-lock" : ""}`}>
               <button type="button" className="ghost-btn" onClick={copyLink}>
                 {copied ? "Lien copie" : "Copier le lien"}
               </button>
@@ -776,6 +783,7 @@ export default function RoomPage() {
                   disabled={!canTransmit}
                   onPointerDown={(event) => {
                     event.preventDefault();
+                    event.stopPropagation();
                     event.currentTarget.setPointerCapture(event.pointerId);
                     handlePressStart();
                   }}
@@ -784,11 +792,13 @@ export default function RoomPage() {
                   }}
                   onPointerUp={(event) => {
                     event.preventDefault();
+                    event.stopPropagation();
                     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
                       event.currentTarget.releasePointerCapture(event.pointerId);
                     }
                     handlePressEnd();
                   }}
+                  onPointerLeave={handlePressEnd}
                   onPointerCancel={handlePressEnd}
                   onContextMenu={(event) => event.preventDefault()}
                 >
