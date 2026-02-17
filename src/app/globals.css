@@ -34,6 +34,7 @@ body {
   background-attachment: fixed;
   -webkit-user-select: none;
   user-select: none;
+  overflow: hidden;
 }
 
 .app-shell {
@@ -42,6 +43,8 @@ body {
   grid-template-rows: auto 1fr;
   gap: 18px;
   padding: 18px clamp(14px, 4vw, 36px) 28px;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
 .retro {
@@ -83,6 +86,13 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.topbar.rx-live {
+  border-color: rgba(18, 213, 255, 0.6);
+  box-shadow:
+    inset 0 0 18px rgba(18, 213, 255, 0.18),
+    0 0 18px rgba(18, 213, 255, 0.25);
 }
 
 .brand-mark {
@@ -492,5 +502,42 @@ body {
   .ptt-button {
     width: min(170px, 74vw);
     font-size: 0.78rem;
+  }
+
+  .hero {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell {
+    gap: 12px;
+    padding: 12px 12px 16px;
+  }
+
+  .retro-panel {
+    padding: 10px;
+  }
+
+  .hero {
+    gap: 12px;
+  }
+
+  .talkie-face {
+    padding: 10px;
+  }
+
+  .ptt-button {
+    width: min(150px, 70vw);
+    font-size: 0.72rem;
+  }
+
+  .audio-meter {
+    width: 140px;
+    height: 14px;
+  }
+
+  .text-input {
+    padding: 6px 8px;
   }
 }

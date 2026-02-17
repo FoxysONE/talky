@@ -38,6 +38,7 @@ export default function RoomPage() {
   const [isHolding, setIsHolding] = useState(false);
   const [micReady, setMicReady] = useState(false);
   const [level, setLevel] = useState(0);
+  const [remoteLevel, setRemoteLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -50,6 +51,9 @@ export default function RoomPage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterRafRef = useRef<number | null>(null);
+  const remoteRafRef = useRef<number | null>(null);
+  const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
+  const remoteSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const busyTimeoutRef = useRef<number | null>(null);
   const roomUnsubRef = useRef<(() => void) | null>(null);
@@ -60,6 +64,7 @@ export default function RoomPage() {
   const peerSignalsRef = useRef<Map<string, Set<string>>>(new Map());
   const peerAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const offeredPeersRef = useRef<Set<string>>(new Set());
+  const remoteAudioMixRef = useRef<HTMLAudioElement | null>(null);
 
   const setTransientBusyMessage = useCallback((message: string) => {
     setBusyMessage(message);
@@ -157,6 +162,9 @@ export default function RoomPage() {
           peerAudioRef.current.set(peerId, audio);
         }
 
+        if (!remoteAudioMixRef.current) {
+          remoteAudioMixRef.current = audio;
+        }
         audio.srcObject = stream;
         void audio.play().catch(() => {
           // Autoplay can be blocked; ignore.
@@ -437,6 +445,58 @@ export default function RoomPage() {
   }, [micReady]);
 
   useEffect(() => {
+    const audio = remoteAudioMixRef.current;
+    if (!audio) {
+      return;
+    }
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+
+    const context = audioContextRef.current;
+    if (!remoteAnalyserRef.current) {
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.7;
+      remoteAnalyserRef.current = analyser;
+    }
+
+    if (!remoteSourceRef.current) {
+      const source = context.createMediaElementSource(audio);
+      source.connect(remoteAnalyserRef.current);
+      remoteAnalyserRef.current.connect(context.destination);
+      remoteSourceRef.current = source;
+    }
+
+    const analyser = remoteAnalyserRef.current;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 1) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const next = Math.min(1, Math.max(0, rms * 2.4));
+      setRemoteLevel(next);
+      meterRafRef.current = window.requestAnimationFrame(tick);
+    };
+
+    remoteRafRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      // Keep analyser/source for reuse; only stop the RAF.
+      if (remoteRafRef.current !== null) {
+        window.cancelAnimationFrame(remoteRafRef.current);
+        remoteRafRef.current = null;
+      }
+    };
+  }, [participants.length]);
+
+  useEffect(() => {
     if (!clientId) {
       return;
     }
@@ -595,6 +655,10 @@ export default function RoomPage() {
         window.clearTimeout(busyTimeoutRef.current);
         busyTimeoutRef.current = null;
       }
+      if (remoteRafRef.current !== null) {
+        window.cancelAnimationFrame(remoteRafRef.current);
+        remoteRafRef.current = null;
+      }
 
       if (localStreamRef.current) {
         for (const track of localStreamRef.current.getTracks()) {
@@ -607,6 +671,8 @@ export default function RoomPage() {
         void audioContextRef.current.close();
         audioContextRef.current = null;
       }
+      remoteAnalyserRef.current = null;
+      remoteSourceRef.current = null;
 
       const activeClientId = clientIdRef.current;
       if (activeClientId) {
@@ -649,7 +715,7 @@ export default function RoomPage() {
 
   return (
     <main className="app-shell retro">
-      <header className="topbar retro-panel">
+      <header className={`topbar retro-panel ${remoteLevel > 0.08 ? "rx-live" : ""}`}>
         <span className="brand-mark">TALKY</span>
         <div className="connection-dots" aria-label="Statut de connexion">
           <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
