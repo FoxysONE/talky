@@ -1,15 +1,14 @@
 import {
   CollectionReference,
   DocumentReference,
-  QuerySnapshot,
   collection,
   deleteDoc,
   doc,
   getDocs,
+  getCountFromServer,
   onSnapshot,
   runTransaction,
-  setDoc,
-  query
+  setDoc
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import type { JoinRoomResult, ParticipantDoc, RoomDoc } from "@/types/rtc";
@@ -62,16 +61,8 @@ export async function joinRoom(roomId: string, clientId: string): Promise<JoinRo
 
       transaction.set(roomRef, room, { merge: true });
 
-      const participantsQuery = query(participantsCollectionRef(roomId));
-      const participantsSnap = (await transaction.get(participantsQuery)) as QuerySnapshot;
-
-      let activeCount = 0;
-      participantsSnap.forEach((docSnap) => {
-        const participant = toParticipant(docSnap.id, docSnap.data() as Partial<ParticipantDoc>);
-        if (isParticipantActive(participant, now)) {
-          activeCount += 1;
-        }
-      });
+      const countSnap = await getCountFromServer(participantsCollectionRef(roomId));
+      const activeCount = countSnap.data().count;
 
       if (activeCount >= MAX_PARTICIPANTS) {
         return { ok: false, reason: "full" };
