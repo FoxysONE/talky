@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Space_Grotesk } from "next/font/google";
+import { Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import "./globals.css";
 
-const spaceGrotesk = Space_Grotesk({
+const pressStart = Press_Start_2P({
   subsets: ["latin"],
-  variable: "--font-main",
-  weight: ["400", "500", "700"]
+  variable: "--font-display",
+  weight: ["400"]
+});
+
+const shareTech = Share_Tech_Mono({
+  subsets: ["latin"],
+  variable: "--font-body",
+  weight: ["400"]
 });
 
 export const metadata: Metadata = {
@@ -16,8 +22,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
-      <body className={spaceGrotesk.variable}>{children}</body>
+      <body className={`${pressStart.variable} ${shareTech.variable}`}>{children}</body>
     </html>
   );
 }
-

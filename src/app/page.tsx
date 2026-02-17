@@ -61,21 +61,21 @@ export default function HomePage() {
   };
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
+    <main className="app-shell retro">
+      <header className="topbar retro-panel">
         <span className="brand-mark">TALKY</span>
-        <span className="topbar-sub">Live 2 personnes</span>
+        <span className="topbar-sub">RETRO LINK MODE</span>
       </header>
 
-      <section className="hero reveal">
-        <div>
-          <p className="eyebrow">Talky</p>
-          <h1 className="brand">Talkie-walkie web minimaliste</h1>
-          <p className="subtle">2 personnes, un lien secret, maintenir pour parler.</p>
+      <section className="hero reveal retro-panel">
+        <div className="screen">
+          <p className="eyebrow">TALKIE</p>
+          <h1 className="brand">Talky</h1>
+          <p className="subtle">P2P mesh, PIN local 4 chiffres.</p>
         </div>
 
         <div className="hero-actions">
-          <div className="talkie-face">
+          <div className="talkie-face compact">
             <div className="speaker-grill" aria-hidden="true" />
             <div className="knob-row" aria-hidden="true">
               <span className="knob">CH 1</span>
@@ -85,12 +85,12 @@ export default function HomePage() {
           </div>
 
           <button type="button" className="action-btn" onClick={handleCreateRoom}>
-            Creer une room (PIN)
+            Lancer room
           </button>
 
           <form className="controls" onSubmit={handleJoinRoom}>
             <label htmlFor="room-id" className="subtle">
-              Rejoindre avec un PIN (4 chiffres)
+              PIN (4 chiffres)
             </label>
             <input
               id="room-id"
@@ -108,7 +108,7 @@ export default function HomePage() {
             </button>
           </form>
 
-          {localPin && <p className="subtle">Ton PIN local: {localPin}</p>}
+          {localPin && <p className="subtle">PIN local: {localPin}</p>}
           {error && <p className="error-line">{error}</p>}
         </div>
       </section>

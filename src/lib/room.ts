@@ -5,9 +5,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  getCountFromServer,
   onSnapshot,
-  runTransaction,
   setDoc
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
@@ -53,33 +51,26 @@ export function isParticipantActive(participant: ParticipantDoc, now = Date.now(
 
 export async function joinRoom(roomId: string, clientId: string): Promise<JoinRoomResult> {
   try {
-    return await runTransaction(getDb(), async (transaction) => {
-      const roomRef = roomDocRef(roomId);
-      const roomSnap = await transaction.get(roomRef);
-      const now = Date.now();
-      const room = normalizeRoomDoc(roomSnap.exists() ? (roomSnap.data() as Partial<RoomDoc>) : undefined);
+    const now = Date.now();
+    const roomRef = roomDocRef(roomId);
+    const room = normalizeRoomDoc(undefined);
+    await setDoc(roomRef, room, { merge: true });
 
-      transaction.set(roomRef, room, { merge: true });
+    const active = await fetchParticipants(roomId);
+    if (active.length >= MAX_PARTICIPANTS) {
+      return { ok: false, reason: "full" };
+    }
 
-      const countSnap = await getCountFromServer(participantsCollectionRef(roomId));
-      const activeCount = countSnap.data().count;
+    await setDoc(
+      doc(participantsCollectionRef(roomId), clientId),
+      {
+        joinedAt: now,
+        lastSeen: now
+      },
+      { merge: true }
+    );
 
-      if (activeCount >= MAX_PARTICIPANTS) {
-        return { ok: false, reason: "full" };
-      }
-
-      const participantRef = doc(participantsCollectionRef(roomId), clientId);
-      transaction.set(
-        participantRef,
-        {
-          joinedAt: now,
-          lastSeen: now
-        },
-        { merge: true }
-      );
-
-      return { ok: true, clientId };
-    });
+    return { ok: true, clientId };
   } catch {
     return { ok: false, reason: "error" };
   }

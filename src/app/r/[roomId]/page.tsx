@@ -37,14 +37,19 @@ export default function RoomPage() {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
   const [micReady, setMicReady] = useState(false);
+  const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const clientIdRef = useRef<string | null>(null);
+  const startedRef = useRef(false);
   const pressingRef = useRef(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const localTrackRef = useRef<MediaStreamTrack | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const meterRafRef = useRef<number | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const busyTimeoutRef = useRef<number | null>(null);
   const roomUnsubRef = useRef<(() => void) | null>(null);
@@ -73,6 +78,7 @@ export default function RoomPage() {
     pressingRef.current = false;
     setIsHolding(false);
     setIsTransmitting(false);
+    setLevel(0);
 
     if (localTrackRef.current) {
       localTrackRef.current.enabled = false;
@@ -386,6 +392,51 @@ export default function RoomPage() {
   }, [handlePressEnd, handlePressStart]);
 
   useEffect(() => {
+    if (!micReady || !localStreamRef.current) {
+      return;
+    }
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+
+    const context = audioContextRef.current;
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.8;
+    analyserRef.current = analyser;
+
+    const source = context.createMediaStreamSource(localStreamRef.current);
+    source.connect(analyser);
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 1) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const next = Math.min(1, Math.max(0, rms * 2.2));
+      setLevel(next);
+      meterRafRef.current = window.requestAnimationFrame(tick);
+    };
+
+    meterRafRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      source.disconnect();
+      analyser.disconnect();
+      if (meterRafRef.current !== null) {
+        window.cancelAnimationFrame(meterRafRef.current);
+        meterRafRef.current = null;
+      }
+    };
+  }, [micReady]);
+
+  useEffect(() => {
     if (!clientId) {
       return;
     }
@@ -433,6 +484,10 @@ export default function RoomPage() {
     let cancelled = false;
 
     const setup = async () => {
+      if (startedRef.current) {
+        return;
+      }
+      startedRef.current = true;
       if (!roomId || !isValidPin) {
         setJoinState("error");
         setError("PIN invalide.");
@@ -520,6 +575,7 @@ export default function RoomPage() {
 
     return () => {
       cancelled = true;
+      startedRef.current = false;
       window.removeEventListener("beforeunload", beforeUnload);
 
       void stopTalking();
@@ -547,6 +603,10 @@ export default function RoomPage() {
         localStreamRef.current = null;
       }
       localTrackRef.current = null;
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
 
       const activeClientId = clientIdRef.current;
       if (activeClientId) {
@@ -588,8 +648,8 @@ export default function RoomPage() {
   const statusClass = useMemo(() => statusLabel.toLowerCase().replaceAll(" ", "-"), [statusLabel]);
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
+    <main className="app-shell retro">
+      <header className="topbar retro-panel">
         <span className="brand-mark">TALKY</span>
         <div className="connection-dots" aria-label="Statut de connexion">
           <span className={`connection-dot ${joinState === "ready" ? "on" : ""}`} />
@@ -598,10 +658,10 @@ export default function RoomPage() {
         <span className={`device-state ${isTransmitting ? "live" : ""}`}>{isTransmitting ? "TX" : "RX"}</span>
       </header>
 
-      <section className="hero reveal">
-        <div className="room-header">
-          <p className="eyebrow">Talky - room</p>
-          <h1 className="brand room-title">{roomId || "room invalide"}</h1>
+      <section className="hero reveal retro-panel">
+        <div className="room-header screen">
+          <p className="eyebrow">ROOM</p>
+          <h1 className="brand room-title">{roomId || "PIN invalide"}</h1>
           <p className={`status-pill status-${statusClass}`}>{statusLabel}</p>
         </div>
 
@@ -623,7 +683,7 @@ export default function RoomPage() {
               </Link>
             </div>
 
-            <div className="talkie-face">
+            <div className="talkie-face compact">
               <div className="speaker-grill" aria-hidden="true" />
               <div className="knob-row" aria-hidden="true">
                 <span className="knob">CH 1</span>
@@ -657,15 +717,29 @@ export default function RoomPage() {
                   onPointerCancel={handlePressEnd}
                   onContextMenu={(event) => event.preventDefault()}
                 >
-                  {isTransmitting ? "Parle..." : "Maintenir pour parler"}
+                  {isTransmitting ? "TX..." : "PTT"}
                 </button>
+                <div
+                  className={`audio-meter ${isTransmitting ? "live" : ""}`}
+                  style={{ "--level": level.toFixed(2) } as React.CSSProperties}
+                >
+                  <span className="audio-meter-fill" />
+                  <span className="audio-meter-scan" />
+                  <div className="audio-meter-bars" aria-hidden="true">
+                    {Array.from({ length: 12 }).map((_, index) => (
+                      <span key={index} className="audio-bar" />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <p className="speaker-line">Parole libre (mix voix)</p>
-            <p className="subtle">Participants: {participants.length}/{MAX_PARTICIPANTS}</p>
-            <p className="subtle">PIN: {roomId}</p>
-            <p className="subtle">Utilisateurs connectes: {participants.length}</p>
+            <div className="stats-grid">
+              <p className="speaker-line">Parole libre</p>
+              <p className="subtle">Participants: {participants.length}/{MAX_PARTICIPANTS}</p>
+              <p className="subtle">PIN: {roomId}</p>
+              <p className="subtle">Connectes: {participants.length}</p>
+            </div>
 
             {participants.length <= 1 && joinState === "ready" && (
               <p className="warn-line">Tu es seul pour l'instant, mais tu peux tester le PTT.</p>
