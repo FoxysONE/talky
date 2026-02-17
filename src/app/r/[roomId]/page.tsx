@@ -44,6 +44,7 @@ export default function RoomPage() {
   const [remoteActive, setRemoteActive] = useState(false);
   const [pttHolder, setPttHolder] = useState<Holder>("none");
   const [isTransmitting, setIsTransmitting] = useState(false);
+  const [micReady, setMicReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -326,10 +327,7 @@ export default function RoomPage() {
     [createSessionPeerConnection, roomId]
   );
 
-  const canTransmit = useMemo(
-    () => joinState === "ready" && role !== null && remoteActive && connectionState === "connected",
-    [connectionState, joinState, remoteActive, role]
-  );
+  const canTransmit = useMemo(() => joinState === "ready" && role !== null && micReady, [joinState, micReady, role]);
 
   const startTalking = useCallback(async () => {
     if (!canTransmit || acquiringPttRef.current || isTransmitting) {
@@ -423,10 +421,10 @@ export default function RoomPage() {
   }, [isTransmitting, pttHolder, role, stopTalking]);
 
   useEffect(() => {
-    if (isTransmitting && (!remoteActive || connectionState !== "connected")) {
+    if (isTransmitting && !micReady) {
       void stopTalking();
     }
-  }, [connectionState, isTransmitting, remoteActive, stopTalking]);
+  }, [isTransmitting, micReady, stopTalking]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -561,6 +559,7 @@ export default function RoomPage() {
         micTrack.enabled = false;
         localStreamRef.current = micStream;
         localTrackRef.current = micTrack;
+        setMicReady(true);
 
         roleRef.current = join.role;
         setRole(join.role);
@@ -802,6 +801,9 @@ export default function RoomPage() {
             <p className="subtle">Role: {role ?? "..."}</p>
             <p className="subtle">PIN: {roomId}</p>
             <p className="subtle">Utilisateurs connectes: {bothConnected ? "2/2" : "1/2"}</p>
+            {!remoteActive && joinState === "ready" && (
+              <p className="warn-line">Tu es seul pour l'instant, mais tu peux tester le PTT.</p>
+            )}
 
             {!remoteActive && joinState === "ready" && (
               <p className="subtle">En attente de la deuxieme personne...</p>
