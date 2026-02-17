@@ -147,7 +147,7 @@ export default function RoomPage() {
         if (!audio) {
           audio = new Audio();
           audio.autoplay = true;
-          audio.playsInline = true;
+          (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
           peerAudioRef.current.set(peerId, audio);
         }
 
@@ -274,13 +274,13 @@ export default function RoomPage() {
       const pc = createAudioPeerConnection({
         localStream,
         onRemoteStream: (stream) => {
-          let audio = peerAudioRef.current.get(peerId);
-          if (!audio) {
-            audio = new Audio();
-            audio.autoplay = true;
-            audio.playsInline = true;
-            peerAudioRef.current.set(peerId, audio);
-          }
+      let audio = peerAudioRef.current.get(peerId);
+      if (!audio) {
+        audio = new Audio();
+        audio.autoplay = true;
+        (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+        peerAudioRef.current.set(peerId, audio);
+      }
 
           audio.srcObject = stream;
           void audio.play().catch(() => {
