@@ -42,6 +42,7 @@ export default function RoomPage() {
   const [micReady, setMicReady] = useState(false);
   const [level, setLevel] = useState(0);
   const [remoteLevel, setRemoteLevel] = useState(0);
+  const [audioUnlockNeeded, setAudioUnlockNeeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -142,6 +143,57 @@ export default function RoomPage() {
     clearTransmissionState();
   }, [clearTransmissionState]);
 
+  const ensurePeerAudioElement = useCallback((peerId: string): HTMLAudioElement => {
+    let audio = peerAudioRef.current.get(peerId);
+    if (audio) {
+      return audio;
+    }
+
+    audio = new Audio();
+    audio.autoplay = true;
+    audio.preload = "auto";
+    audio.muted = false;
+    audio.volume = 1;
+    (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+    peerAudioRef.current.set(peerId, audio);
+    return audio;
+  }, []);
+
+  const resumeRemoteAudioPlayback = useCallback(async () => {
+    if (audioContextRef.current?.state === "suspended") {
+      try {
+        await audioContextRef.current.resume();
+      } catch {
+        // Ignore blocked resume.
+      }
+    }
+
+    let blocked = false;
+    for (const audio of peerAudioRef.current.values()) {
+      try {
+        await audio.play();
+      } catch {
+        blocked = true;
+      }
+    }
+
+    setAudioUnlockNeeded(blocked);
+  }, []);
+
+  const attachRemoteStream = useCallback(
+    (peerId: string, stream: MediaStream) => {
+      const audio = ensurePeerAudioElement(peerId);
+      if (audio.srcObject !== stream) {
+        audio.srcObject = stream;
+      }
+
+      void audio.play().catch(() => {
+        setAudioUnlockNeeded(true);
+      });
+    },
+    [ensurePeerAudioElement]
+  );
+
   const closePeerConnections = useCallback(() => {
     for (const [, pc] of peerConnectionsRef.current.entries()) {
       pc.onicecandidate = null;
@@ -157,6 +209,7 @@ export default function RoomPage() {
     peerUnsubsRef.current.clear();
 
     for (const [, audio] of peerAudioRef.current.entries()) {
+      audio.pause();
       audio.srcObject = null;
     }
     peerAudioRef.current.clear();
@@ -164,6 +217,7 @@ export default function RoomPage() {
     peerCandidatesRef.current.clear();
     peerSignalsRef.current.clear();
     offeredPeersRef.current.clear();
+    setAudioUnlockNeeded(false);
     setRemoteLevel(0);
     setConnectionState("new");
   }, []);
@@ -202,19 +256,7 @@ export default function RoomPage() {
         if (!stream) {
           return;
         }
-
-        let audio = peerAudioRef.current.get(peerId);
-        if (!audio) {
-          audio = new Audio();
-          audio.autoplay = true;
-          (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
-          peerAudioRef.current.set(peerId, audio);
-        }
-
-        audio.srcObject = stream;
-        void audio.play().catch(() => {
-          // Autoplay can be blocked; ignore.
-        });
+        attachRemoteStream(peerId, stream);
       };
 
       pc.onconnectionstatechange = () => {
@@ -233,55 +275,42 @@ export default function RoomPage() {
             if (change.type !== "added") {
               continue;
             }
+
             if (signalsSet.has(change.doc.id)) {
               continue;
             }
-            signalsSet.add(change.doc.id);
 
             const data = change.doc.data() as SignalDoc & { type: "offer" | "answer" };
-            if (data.from !== peerId || data.type !== "offer") {
+            if (data.from !== peerId) {
               continue;
             }
-            try {
-              await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
 
-              await addDoc(signalsCollectionRef(roomId), {
-                from: clientIdNow,
-                to: peerId,
-                type: "answer",
-                sdp: answer,
-                createdAt: Date.now()
-              });
-            } catch {
-              // Ignore stale offers.
-            }
-          }
-        })
-      );
-
-      unsubs.push(
-        onSnapshot(signalsQuery, async (snapshot) => {
-          for (const change of snapshot.docChanges()) {
-            if (change.type !== "added") {
-              continue;
-            }
-            if (signalsSet.has(change.doc.id)) {
-              continue;
-            }
             signalsSet.add(change.doc.id);
 
-            const data = change.doc.data() as SignalDoc & { type: "offer" | "answer" };
-            if (data.from !== peerId || data.type !== "answer") {
-              continue;
-            }
-            try {
-              if (pc.signalingState === "have-local-offer") {
+            if (data.type === "offer") {
+              try {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                await addDoc(signalsCollectionRef(roomId), {
+                  from: clientIdNow,
+                  to: peerId,
+                  type: "answer",
+                  sdp: answer,
+                  createdAt: Date.now()
+                });
+              } catch {
+                // Ignore stale offers.
               }
-            } catch {
-              // Ignore stale answers.
+            } else if (data.type === "answer") {
+              try {
+                if (pc.signalingState === "have-local-offer") {
+                  await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                }
+              } catch {
+                // Ignore stale answers.
+              }
             }
           }
         })
@@ -314,7 +343,7 @@ export default function RoomPage() {
         unsubs.forEach((unsub) => unsub());
       });
     },
-    [roomId]
+    [attachRemoteStream, roomId]
   );
 
   const createPeerConnection = useCallback(
@@ -327,18 +356,7 @@ export default function RoomPage() {
       const pc = createAudioPeerConnection({
         localStream,
         onRemoteStream: (stream) => {
-          let audio = peerAudioRef.current.get(peerId);
-          if (!audio) {
-            audio = new Audio();
-            audio.autoplay = true;
-            (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
-            peerAudioRef.current.set(peerId, audio);
-          }
-
-          audio.srcObject = stream;
-          void audio.play().catch(() => {
-            // Autoplay can be blocked.
-          });
+          attachRemoteStream(peerId, stream);
         },
         onConnectionStateChange: (state) => {
           setConnectionState(state);
@@ -349,7 +367,7 @@ export default function RoomPage() {
       peerConnectionsRef.current.set(peerId, pc);
       return pc;
     },
-    [attachPeerListeners]
+    [attachPeerListeners, attachRemoteStream]
   );
 
   const canTransmit = useMemo(
@@ -382,11 +400,12 @@ export default function RoomPage() {
     }
 
     pressingRef.current = true;
+    void resumeRemoteAudioPlayback();
     setIsHolding(true);
     ensureSfx();
     playSfx(pttDownAudioRef);
     void startTalking();
-  }, [ensureSfx, joinState, playSfx, startTalking]);
+  }, [ensureSfx, joinState, playSfx, resumeRemoteAudioPlayback, startTalking]);
 
   const handlePressEnd = useCallback(() => {
     setIsHolding(false);
@@ -451,6 +470,24 @@ export default function RoomPage() {
       window.removeEventListener("keyup", keyup);
     };
   }, [handlePressEnd, handlePressStart]);
+
+  useEffect(() => {
+    if (!audioUnlockNeeded) {
+      return;
+    }
+
+    const unlock = () => {
+      void resumeRemoteAudioPlayback();
+    };
+
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [audioUnlockNeeded, resumeRemoteAudioPlayback]);
 
   useEffect(() => {
     if (!micReady || !localStreamRef.current) {
@@ -614,10 +651,35 @@ export default function RoomPage() {
       if (!activePeers.includes(peerId)) {
         const pc = peerConnectionsRef.current.get(peerId);
         if (pc) {
+          pc.onicecandidate = null;
+          pc.ontrack = null;
+          pc.onconnectionstatechange = null;
           pc.close();
         }
         peerConnectionsRef.current.delete(peerId);
+
+        const unsub = peerUnsubsRef.current.get(peerId);
+        if (unsub) {
+          unsub();
+        }
+        peerUnsubsRef.current.delete(peerId);
+
+        peerCandidatesRef.current.delete(peerId);
+        peerSignalsRef.current.delete(peerId);
+        offeredPeersRef.current.delete(peerId);
+
+        const audio = peerAudioRef.current.get(peerId);
+        if (audio) {
+          audio.pause();
+          audio.srcObject = null;
+          peerAudioRef.current.delete(peerId);
+        }
       }
+    }
+
+    if (activePeers.length === 0) {
+      setRemoteLevel(0);
+      setAudioUnlockNeeded(false);
     }
   }, [clientId, createPeerConnection, participants, roomId, setTransientBusyMessage]);
 
@@ -906,6 +968,20 @@ export default function RoomPage() {
             )}
             {participants.length > 1 && remoteSpeaking && (
               <p className="warn-line">Signal distant detecte. Si tu n'entends rien, verifie volume/sortie audio.</p>
+            )}
+            {participants.length > 1 && audioUnlockNeeded && (
+              <div className="row">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => {
+                    void resumeRemoteAudioPlayback();
+                  }}
+                >
+                  Activer l'audio
+                </button>
+                <p className="subtle">Le navigateur bloque la lecture distante. Clique pour la debloquer.</p>
+              </div>
             )}
 
             {busyMessage && <p className="warn-line">{busyMessage}</p>}
