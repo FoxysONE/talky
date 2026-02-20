@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "mcp__MCP_DOCKER__browser_navigate",
+      "Bash(npx next build:*)"
+    ]
+  }
+}

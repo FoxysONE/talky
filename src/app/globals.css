@@ -1,582 +1,1283 @@
+/* ═══════════════════════════════════════════════════════════════════
+   TALKY — WALKIE-TALKIE PHYSIQUE
+   Corps plastique noir · Écran phosphore vert · PTT orange
+   ═══════════════════════════════════════════════════════════════════ */
+
 :root {
-  --bg-top: #0f0b18;
-  --bg-bottom: #1a0f2a;
-  --ink: #f4edff;
-  --ink-soft: #b7a6d9;
-  --line: rgba(164, 131, 221, 0.18);
-  --brand: #8d4bff;
-  --brand-dark: #5b21b6;
-  --accent: #12d5ff;
-  --glow: rgba(141, 75, 255, 0.42);
-  --danger: #ff6b6b;
+  --b0:  #080807;   /* bord le plus sombre */
+  --b1:  #111110;
+  --b2:  #1a1a18;   /* corps principal */
+  --b3:  #222220;
+  --b4:  #2c2c29;   /* relief clair */
+
+  --s0:  #030703;   /* fond écran */
+  --g1:  #0e4a1c;
+  --g2:  #15803d;
+  --g3:  #22c55e;
+  --g4:  #4ade80;   /* phosphore vif */
+  --gg:  rgba(34,197,94,0.16);
+
+  --p0:  #3f1209;   /* PTT bague */
+  --p1:  #9a3412;
+  --p2:  #c2410c;
+  --p3:  #ea580c;
+  --p4:  #fb923c;   /* reflet chaud */
+
+  --lo:  #0f180f;   /* LED off */
+  --lg:  #22c55e;
+  --lgg: rgba(34,197,94,0.80);
+  --lr:  #ef4444;
+  --lrg: rgba(239,68,68,0.80);
+
+  --t1:  #b0b0a8;
+  --t2:  #505048;
+
+  --danger: #ef4444;
+  --warn:   #f59e0b;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
 
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-}
-
+/* ── fond : table/surface sombre ── */
 body {
   font-family: var(--font-body), "Courier New", monospace;
-  color: var(--ink);
+  font-size: 14px;
+  color: var(--t1);
   background:
-    radial-gradient(circle at 15% 12%, rgba(141, 75, 255, 0.18), transparent 46%),
-    radial-gradient(circle at 82% 16%, rgba(18, 213, 255, 0.16), transparent 42%),
-    radial-gradient(circle at 50% 85%, rgba(64, 12, 140, 0.35), transparent 55%),
-    linear-gradient(165deg, var(--bg-top), var(--bg-bottom));
-  background-attachment: fixed;
+    url("/assets/surface.jpg") center/cover fixed,
+    linear-gradient(135deg, #141310 0%, #0a0908 100%);
   -webkit-user-select: none;
   user-select: none;
   overflow: hidden;
 }
 
-.app-shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 18px;
-  padding: 18px clamp(14px, 4vw, 36px) 28px;
-  max-height: 100vh;
-  overflow: hidden;
-}
-
-.retro {
-  position: relative;
-}
-
-.retro::before {
+/* Lignes de scan CRT — légères */
+body::after {
   content: "";
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 18px 18px, 18px 18px;
-  mix-blend-mode: screen;
-  opacity: 0.25;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,          transparent 2px,
+    rgba(0,0,0,0.055) 2px, rgba(0,0,0,0.055) 3px
+  );
+  z-index: 9999;
 }
 
-.retro-panel {
-  border: 1px solid rgba(141, 75, 255, 0.3);
-  border-radius: 14px;
-  padding: 12px 14px;
-  background: rgba(12, 8, 24, 0.9);
-  box-shadow:
-    inset 0 0 18px rgba(6, 4, 12, 0.85),
-    0 10px 20px rgba(6, 4, 12, 0.6);
-}
 
-.screen {
-  border: 1px solid rgba(18, 213, 255, 0.35);
-  border-radius: 10px;
-  padding: 12px;
-  background: radial-gradient(circle at top, rgba(18, 213, 255, 0.12), transparent 65%);
-  box-shadow: inset 0 0 16px rgba(18, 213, 255, 0.08);
-}
+/* ═══════════════════════════════════════════════════════════════════
+   SHELL — centre le device dans la page
+   ═══════════════════════════════════════════════════════════════════ */
 
-.topbar {
+.shell {
+  min-height: 100vh;
   display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.topbar.rx-live {
-  border-color: rgba(18, 213, 255, 0.6);
-  box-shadow:
-    inset 0 0 18px rgba(18, 213, 255, 0.18),
-    0 0 18px rgba(18, 213, 255, 0.25);
-}
-
-.brand-mark {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.35em;
-  color: var(--ink-soft);
-}
-
-.topbar-sub {
-  font-size: 0.75rem;
-  color: rgba(164, 131, 221, 0.7);
-}
-
-.hero {
-  display: grid;
-  gap: 16px;
-  max-width: 520px;
-}
-
-.hero-actions {
-  display: grid;
-  gap: 10px;
-}
-
-.room-header {
-  display: grid;
-  gap: 6px;
-}
-
-.reveal {
-  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-
-.eyebrow {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.62rem;
-  color: var(--ink-soft);
-  font-weight: 700;
-}
-
-.brand {
-  margin: 0;
-  font-family: var(--font-display), "Courier New", monospace;
-  font-size: clamp(1.1rem, 2vw, 1.4rem);
-  line-height: 1.2;
-}
-
-.room-title {
-  overflow-wrap: anywhere;
-  font-size: clamp(1rem, 2vw, 1.2rem);
-}
-
-.subtle {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-}
-
-.controls {
-  display: grid;
-  gap: 9px;
-}
-
-.row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.hold-lock {
-  pointer-events: none;
-  opacity: 0.6;
-}
-
-.text-input {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font: inherit;
-  color: inherit;
-  background: rgba(12, 8, 22, 0.9);
-}
-
-.text-input:focus-visible {
-  outline: 2px solid rgba(141, 75, 255, 0.5);
-  outline-offset: 2px;
-}
-
-.action-btn,
-.ghost-btn {
-  border: 0;
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
-}
-
-.action-btn {
-  padding: 10px 12px;
-  color: #fff;
-  background: linear-gradient(130deg, var(--brand), var(--brand-dark));
-  box-shadow: 0 10px 20px rgba(91, 33, 182, 0.4);
-}
-
-.ghost-btn {
-  padding: 9px 12px;
-  color: var(--ink);
-  background: rgba(24, 15, 40, 0.9);
-  border: 1px solid var(--line);
-}
-
-.action-btn:hover,
-.ghost-btn:hover {
-  transform: translateY(-1px);
-}
-
-.action-btn:disabled,
-.ghost-btn:disabled,
-.ptt-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.link-btn {
-  text-decoration: none;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: clamp(6px, 2vh, 20px) clamp(8px, 2vw, 16px);
 }
 
-.status-pill {
-  margin: 0;
-  justify-self: start;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--ink);
-  background: rgba(24, 15, 40, 0.9);
-  border: 1px solid var(--line);
-}
 
-.status-connexion,
-.status-en-attente,
-.status-reconnexion {
-  background: rgba(24, 15, 40, 0.9);
-}
+/* ═══════════════════════════════════════════════════════════════════
+   DEVICE — boîtier plastique
+   ═══════════════════════════════════════════════════════════════════ */
 
-.status-connecte {
-  background: rgba(18, 213, 255, 0.14);
-  border-color: rgba(18, 213, 255, 0.35);
-}
-
-.status-occupe {
-  background: rgba(141, 75, 255, 0.16);
-  border-color: rgba(141, 75, 255, 0.4);
-}
-
-.status-erreur {
-  background: rgba(255, 107, 107, 0.14);
-  border-color: rgba(255, 107, 107, 0.4);
-}
-
-.talkie-face {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(141, 75, 255, 0.25);
-  background: linear-gradient(160deg, rgba(24, 16, 40, 0.9), rgba(12, 8, 24, 0.9));
-  box-shadow:
-    inset 0 0 24px rgba(8, 5, 14, 0.8),
-    0 16px 32px rgba(6, 4, 12, 0.5);
-}
-
-.speaker-grill {
-  height: 34px;
-  border-radius: 8px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.08),
-      rgba(255, 255, 255, 0.08) 7px,
-      rgba(8, 5, 14, 0.75) 7px,
-      rgba(8, 5, 14, 0.75) 12px
-    );
-  border: 1px solid rgba(141, 75, 255, 0.2);
-  box-shadow: inset 0 0 12px rgba(6, 4, 12, 0.9);
-}
-
-.knob-row {
+.device {
+  position: relative;
+  width: min(340px, 100vw);
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  flex-direction: column;
+
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.09'/%3E%3C/svg%3E") repeat,
+    url("/assets/body-grain.png") repeat,
+    linear-gradient(170deg, var(--b3) 0%, var(--b2) 45%, var(--b1) 100%);
+
+  border-radius: 22px 22px 18px 18px;
+  border: 1px solid var(--b0);
+
+  /* Plastique moulé 3D */
+  box-shadow:
+    inset 0  1px 0 rgba(255,255,255,0.09),
+    inset 0 -2px 0 rgba(0,0,0,0.55),
+    inset  3px 0 0 rgba(255,255,255,0.035),
+    inset -3px 0 0 rgba(0,0,0,0.38),
+    0 22px 64px rgba(0,0,0,0.92),
+    0  6px 18px rgba(0,0,0,0.65),
+    0  2px  4px rgba(0,0,0,0.85);
 }
 
-.knob {
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(141, 75, 255, 0.25);
-  background: rgba(12, 8, 22, 0.8);
-  font-size: 0.6rem;
-  letter-spacing: 0.18em;
+/* Grip latéral gauche */
+.device::before {
+  content: "";
+  position: absolute;
+  top: 108px; bottom: 80px; left: 0;
+  width: 5px;
+  background: repeating-linear-gradient(
+    0deg, var(--b0), var(--b0) 2px, var(--b3) 2px, var(--b3) 5px
+  );
+  border-radius: 0 1px 1px 0;
+  opacity: 0.7;
+}
+
+/* Grip latéral droit */
+.device::after {
+  content: "";
+  position: absolute;
+  top: 108px; bottom: 80px; right: 0;
+  width: 5px;
+  background: repeating-linear-gradient(
+    0deg, var(--b0), var(--b0) 2px, var(--b3) 2px, var(--b3) 5px
+  );
+  border-radius: 1px 0 0 1px;
+  opacity: 0.7;
+}
+
+
+/* ─── Antenne ─────────────────────────────────────────────────── */
+
+.device-antenna {
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 32px;
+  height: 46px;
+  margin-top: -46px;
+  pointer-events: none;
+}
+
+.antenna-shaft {
+  width: 7px;
+  height: 100%;
+  border-radius: 3px 3px 0 0;
+  border: 1px solid var(--b0);
+  border-bottom: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px,
+    transparent 1px, transparent 4px
+  ),
+  linear-gradient(to right, rgba(255,255,255,0.07), var(--b2) 40%, var(--b1));
+  box-shadow: 1px 0 4px rgba(0,0,0,0.5);
+}
+
+
+/* ─── Bande marque + LEDs ─────────────────────────────────────── */
+
+.device-topstrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: linear-gradient(180deg, var(--b4) 0%, var(--b3) 100%);
+  border-bottom: 1px solid var(--b0);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.07),
+    0 1px 0 rgba(0,0,0,0.5);
+}
+
+.brand-text {
+  font-family: var(--font-display), monospace;
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.50em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--t1);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  flex: 1;
 }
 
-.ptt-stack {
-  display: grid;
-  gap: 10px;
-  justify-items: center;
+.led-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
+
+/* LED individuelle */
+.led-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #1e261e, var(--lo));
+  border: 1px solid rgba(0,0,0,0.6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.led-dot.on {
+  background: radial-gradient(circle at 38% 32%, #a7f3c4, var(--lg));
+  box-shadow:
+    0 0  6px var(--lgg),
+    0 0 14px rgba(34,197,94,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+.led-dot.tx.on {
+  background: radial-gradient(circle at 38% 32%, #e7fff2, var(--g4));
+  box-shadow:
+    0 0  6px rgba(34,197,94,0.92),
+    0 0 14px rgba(34,197,94,0.65),
+    0 0 30px rgba(21,109,59,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.55);
+  animation: led-tx-pulse 0.60s ease-in-out infinite;
+}
+
+/* Label TX / RX */
+.state-label {
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.30em;
+  text-transform: uppercase;
+  color: var(--t2);
+  margin-left: 4px;
+  transition: color 160ms ease, text-shadow 160ms ease;
+}
+
+.state-label.live {
+  color: #ff6b6b;
+  text-shadow:
+    0 0  5px rgba(239,68,68,1.0),
+    0 0 14px rgba(239,68,68,0.75),
+    0 0 32px rgba(239,68,68,0.40);
+  animation: state-tx-blink 0.60s ease-in-out infinite;
+}
+
+
+/* ─── Grille de haut-parleur (trous CSS) ──────────────────────── */
+
+.speaker-holes {
+  height: 52px;
+  /* Deux rangées de points décalés = vrai motif de haut-parleur */
+  background:
+    radial-gradient(circle, var(--b0) 38%, transparent 39%) 0    0    / 8px 8px,
+    radial-gradient(circle, var(--b0) 38%, transparent 39%) 4px  4px  / 8px 8px,
+    var(--b2);
+  border-top:    1px solid var(--b0);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  box-shadow:
+    inset 0 3px 10px rgba(0,0,0,0.85),
+    inset 0 -1px 0 rgba(255,255,255,0.03);
+}
+
+
+/* ─── Écran LCD phosphore ─────────────────────────────────────── */
+
+.lcd-screen {
+  position: relative;
+  margin: 12px 14px;
+  padding: 11px 14px 13px;
+  background: var(--s0);
+  border-radius: 4px;
+  border: 2px solid #0b190b;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 40px rgba(0,0,0,0.97),
+    inset 0 0 12px var(--gg),
+    0 0 0 1px rgba(0,0,0,0.9),
+    0 2px 8px rgba(0,0,0,0.7);
+}
+
+/* Pixels LCD — overlay scanlines sur l'écran */
+.lcd-screen::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 1px,
+    rgba(0,0,0,0.20) 1px,
+    rgba(0,0,0,0.20) 2px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Reflet de verre */
+.lcd-screen::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: url("/assets/screen-glare.png") no-repeat top left / contain;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.lcd-label {
+  font-size: 0.48rem;
+  letter-spacing: 0.40em;
+  text-transform: uppercase;
+  color: var(--g1);
+  position: relative; z-index: 4;
+}
+
+.lcd-freq {
+  font-family: var(--font-display), monospace;
+  font-size: clamp(2.2rem, 9vw, 3.0rem);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--g4);
+  letter-spacing: 0.03em;
+  text-shadow:
+    0 0 4px  var(--g3),
+    0 0 18px rgba(34,197,94,0.32);
+  position: relative; z-index: 4;
+}
+
+.lcd-prefix { color: var(--g2); font-size: 0.68em; }
+.lcd-pin    { color: var(--g4); }
+
+.lcd-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-size: 0.52rem;
+  color: var(--g1);
+  position: relative;
+  z-index: 4;
+}
+
+.lcd-status {
+  font-size: 0.52rem;
+  letter-spacing: 0.28em;
+  font-weight: 600;
+}
+
+.lcd-count {
+  font-size: 0.82rem;
+  letter-spacing: 0.32em;
+  color: var(--g4);
+  text-shadow: 0 0 10px rgba(34,197,94,0.35);
+}
+
+.lcd-sub.en-attente .lcd-status {
+  color: var(--g1);
+}
+
+.lcd-sub.en-attente .lcd-count {
+  color: var(--g2);
+  text-shadow: 0 0 8px rgba(21,128,61,0.45);
+}
+
+.lcd-sub.connecte .lcd-status,
+.lcd-sub.connecte .lcd-count {
+  color: var(--g4);
+  text-shadow: 0 0 10px rgba(34,197,94,0.45);
+}
+
+.lcd-sub.connexion .lcd-status,
+.lcd-sub.connexion .lcd-count {
+  color: var(--g2);
+  text-shadow: 0 0 6px rgba(21,128,61,0.4);
+}
+
+.lcd-warn { color: #fbbf24; text-shadow: 0 0 8px rgba(251,191,36,0.35); font-size: 1.8rem; }
+.lcd-error{ color: var(--lr);  text-shadow: 0 0 8px var(--lrg);          font-size: 1.8rem; }
+
+
+/* ─── Panneau de contrôle ─────────────────────────────────────── */
+
+.device-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 8px 14px 14px;
+}
+
+
+/* ─── Trous de micro (en bas) ─────────────────────────────────── */
+
+.mic-holes {
+  height: 34px;
+  background:
+    radial-gradient(circle, var(--b0) 40%, transparent 41%) 0 0 / 5px 5px,
+    var(--b2);
+  border-top: 1px solid rgba(255,255,255,0.03);
+  border-radius: 0 0 18px 18px;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.75);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   BOUTON PTT — le héros du design (orange, 3D, physique)
+   Utilisé pour LANCER sur la home ET pour le PTT en room
+   ═══════════════════════════════════════════════════════════════════ */
 
 .ptt-button {
-  width: min(190px, 70vw);
-  aspect-ratio: 1 / 1;
-  justify-self: center;
+  position: relative;
+  overflow: hidden;  /* clip heat-core ::before */
+  width: min(168px, 62vw);
+  aspect-ratio: 1;
+  align-self: center;
   border: 0;
   border-radius: 50%;
-  padding: 16px;
   font: inherit;
-  font-size: 0.85rem;
+  font-family: var(--font-display), monospace;
+  font-size: 0.88rem;
   font-weight: 700;
-  color: #fff;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: #f8ffe9;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  background: radial-gradient(circle at 30% 24%, #c59bff, var(--brand) 62%, #3b1278);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+
+  background: radial-gradient(
+    circle at 35% 25%,
+    #c6ffe2,
+    #66d18f 32%,
+    #1d7344 58%,
+    #0a3518 100%
+  );
   box-shadow:
-    inset 0 -12px 18px rgba(0, 0, 0, 0.24),
-    0 16px 30px rgba(91, 33, 182, 0.45),
-    0 0 24px rgba(141, 75, 255, 0.35);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+    inset 0  3px 0 rgba(255,255,255,0.30),
+    inset 0 -6px 16px rgba(0,0,0,0.45),
+    0 0 0  3px rgba(13,73,39,0.95),
+    0 0 0  6px rgba(0,0,0,0.72),
+    0 12px 34px rgba(14,99,35,0.72),
+    0  4px 16px rgba(0,0,0,0.92);
+
+  transition: transform 80ms ease, box-shadow 80ms ease, filter 160ms ease;
+  filter: saturate(1.2);
 }
 
 .ptt-button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.95) translateY(3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    inset 0 6px 18px rgba(0,0,0,0.45),
+    0 0 0 3px rgba(13,73,39,0.95),
+    0 0 0 5px rgba(0,0,0,0.72),
+    0 3px 14px rgba(30,98,51,0.55);
+}
+
+.ptt-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .ptt-button.live {
-  animation: pulse-live 1.1s ease-in-out infinite;
+  background: radial-gradient(
+    circle at 30% 25%,
+    #f7fff5,
+    #8ef5b9 24%,
+    #39a358 55%,
+    #103818 100%
+  );
+  filter: saturate(1.3) drop-shadow(0 0 12px rgba(26,222,123,0.75));
+  animation: pulse-ptt 1.6s ease-in-out infinite, tx-vibrate 0.09s steps(1) infinite;
+}
+
+/* Heat-core : point chaud central, visible seulement en TX */
+.ptt-button::before {
+  content: "";
+  position: absolute;
+  inset: 16%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(180,255,211,0.70) 0%,
+    rgba(26,163,74,0.32) 42%,
+    transparent 70%
+  );
+  filter: blur(11px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 220ms ease;
+}
+
+.ptt-button.live::before {
+  animation: heat-core 1.2s ease-in-out infinite;
+}
+
+.ptt-button::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 30% 25%,
+    rgba(255,255,255,0.85),
+    rgba(255,255,255,0) 60%
+  );
+  opacity: 0.7;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  transition: opacity 180ms ease;
+}
+
+.ptt-button:active::after {
+  opacity: 0.9;
+}
+
+
+/* ─── Bouton LANCER (home — même style PTT, rectangulaire) ──────── */
+
+.btn-launch {
+  width: 100%;
+  padding: 15px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-family: var(--font-display), monospace;
+  font-size: 1.0rem;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #fff;
+  cursor: pointer;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  background: linear-gradient(180deg, var(--p3) 0%, var(--p2) 50%, var(--p1) 100%);
+  box-shadow:
+    inset 0  2px 0 rgba(255,255,255,0.20),
+    inset 0 -4px 0 rgba(0,0,0,0.32),
+    0 0 0 2px var(--p0),
+    0 0 0 3px rgba(0,0,0,0.65),
+    0 7px 22px rgba(154,52,18,0.58),
+    0 3px  8px rgba(0,0,0,0.80);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+
+.btn-launch:hover:not(:disabled) { transform: translateY(-1px); }
+
+.btn-launch:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset 0 4px 10px rgba(0,0,0,0.3),
+    0 0 0 2px var(--p0),
+    0 0 0 3px rgba(0,0,0,0.65),
+    0 3px 10px rgba(154,52,18,0.40);
+}
+
+
+/* ─── Ligne séparatrice ─────────────────────────────────────────── */
+
+.panel-sep {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--b4) 20%, var(--b4) 80%, transparent);
+  margin: 1px 0;
+}
+
+
+/* ─── Formulaire de syntonisation ───────────────────────────────── */
+
+.tune-form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tune-label {
+  font-size: 0.50rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+
+.tune-row {
+  display: flex;
+  align-items: center;
+  background: var(--s0);
+  border-radius: 3px;
+  border: 1px solid #0b190b;
+  overflow: hidden;
+  box-shadow: inset 0 0 16px rgba(0,0,0,0.85), inset 0 0 6px var(--gg);
+}
+
+.tune-prefix {
+  padding: 10px 5px 10px 11px;
+  font-family: var(--font-display), monospace;
+  font-size: 1.05rem;
+  color: var(--g2);
+  white-space: nowrap;
+  text-shadow: 0 0 6px rgba(34,197,94,0.3);
+  flex-shrink: 0;
+}
+
+.tune-input {
+  flex: 1; min-width: 0;
+  border: 0; outline: 0;
+  background: transparent;
+  padding: 10px 4px;
+  font: inherit;
+  font-family: var(--font-display), monospace;
+  font-size: 1.05rem;
+  letter-spacing: 0.38em;
+  color: var(--g4);
+  text-shadow: 0 0 6px rgba(34,197,94,0.3);
+}
+
+.tune-input::placeholder {
+  color: var(--g1); opacity: 0.7; text-shadow: none;
+}
+
+.tune-btn {
+  padding: 10px 14px;
+  border: 0;
+  border-left: 1px solid #0b190b;
+  background: rgba(34,197,94,0.06);
+  font: inherit;
+  font-size: 1.1rem;
+  color: var(--g2);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+  flex-shrink: 0;
+}
+
+.tune-btn:hover:not(:disabled) {
+  background: rgba(34,197,94,0.14);
+  color: var(--g4);
+}
+
+.tune-btn:disabled { opacity: 0.30; cursor: not-allowed; }
+
+
+/* ─── Bande RX (indicateur écoute) ─────────────────────────────── */
+
+.rx-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--b1);
+  border-radius: 3px;
+  border: 1px solid var(--b0);
+  box-shadow: inset 0 1px 4px rgba(0,0,0,0.65);
+}
+
+.rx-label {
+  font-size: 0.52rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--t2);
+  transition: color 180ms ease, text-shadow 180ms ease;
+}
+
+/* quand .led-dot.on est dans .rx-band → rx-label s'allume */
+.rx-band:has(.led-dot.on) .rx-label {
+  color: var(--g3);
+  text-shadow: 0 0 8px rgba(34,197,94,0.3);
+}
+
+
+/* ─── Zone PTT (panneau enfoncé) ───────────────────────────────── */
+
+.ptt-zone {
+  background: var(--b1);
+  border-radius: 6px;
+  border: 1px solid var(--b0);
+  box-shadow:
+    inset 0 5px 18px rgba(0,0,0,0.82),
+    inset 0 1px 0 rgba(255,255,255,0.015),
+    0 1px 0 rgba(255,255,255,0.035);
+  padding: 16px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+/* ─── Puits du bouton PTT (enceinte circulaire enfoncée) ────────── */
+
+.ptt-well {
+  position: relative;
+  overflow: visible;
+  width: min(196px, 76vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  padding: 14px;
+  background: radial-gradient(circle at 45% 35%, #1a5b2d 0%, #0d270f 62%, #030805 100%);
+  box-shadow:
+    inset 0 12px 24px rgba(0,0,0,0.82),
+    inset 0 4px 12px rgba(34,197,94,0.25),
+    0 0 16px rgba(7,65,34,0.58),
+    0 0 36px rgba(3,38,19,0.46),
+    0 3px 12px rgba(0,0,0,0.90);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 150ms ease, background 150ms ease;
+}
+
+.ptt-well::after {
+  content: "";
+  position: absolute;
+  inset: 11%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(255,255,255,0.06), transparent 70%),
+    repeating-radial-gradient(
+      circle,
+      rgba(255,255,255,0.08) 0,
+      rgba(255,255,255,0.08) 4px,
+      rgba(0,0,0,0) 4px,
+      rgba(0,0,0,0) 6px
+    );
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: screen;
+}
+
+/* Bouton remplit le puits (padding du puits = bord visible) */
+.ptt-well .ptt-button { width: 100%; }
+
+
+/* ─── VUmètres audio ────────────────────────────────────────────── */
+
+.meter-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.meter-label {
+  font-size: 0.44rem;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--t2);
+  width: 14px;
+  flex-shrink: 0;
+  text-align: right;
 }
 
 .audio-meter {
   position: relative;
-  width: 170px;
-  height: 18px;
-  border-radius: 10px;
-  border: 1px solid rgba(141, 75, 255, 0.35);
-  background: rgba(12, 8, 22, 0.85);
+  flex: 1;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--b0);
+  background: var(--b1);
   overflow: hidden;
-  box-shadow: inset 0 0 8px rgba(6, 4, 12, 0.9);
+  box-shadow: inset 0 1px 5px rgba(0,0,0,0.9);
 }
 
 .audio-meter-fill {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  width: 100%;
+  position: absolute; inset: 0;
   transform-origin: left center;
   transform: scaleX(var(--level));
-  background: linear-gradient(90deg, rgba(110, 231, 255, 0.5), rgba(167, 139, 250, 0.6));
-  transition: transform 80ms linear;
+  background: linear-gradient(90deg, var(--g2), var(--g4));
+  transition: transform 65ms linear;
 }
 
 .audio-meter-scan {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 35%, rgba(255, 255, 255, 0.04));
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07), transparent 50%);
   mix-blend-mode: screen;
   pointer-events: none;
 }
 
 .audio-meter-bars {
-  position: absolute;
-  inset: 2px;
+  position: absolute; inset: 2px;
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  gap: 3px;
-  opacity: 0.75;
+  gap: 2px;
+  opacity: 0.85;
   pointer-events: none;
 }
 
 .audio-bar {
-  background: rgba(30, 22, 48, 0.9);
-  border-radius: 3px;
-  box-shadow: inset 0 0 8px rgba(6, 4, 12, 0.9);
+  background: var(--b1);
+  border-radius: 1px;
+}
+
+.audio-meter.live {
+  border-color: rgba(154,52,18,0.50);
+}
+
+/* Scan horizontal lumineux sur mètre TX actif */
+.audio-meter.live .audio-meter-scan {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.22) 50%, transparent 100%);
+  animation: meter-scan-sweep 0.58s linear infinite;
 }
 
 .audio-meter.live .audio-meter-fill {
-  box-shadow: 0 0 10px rgba(110, 231, 255, 0.7);
+  background: linear-gradient(90deg,
+    #7ef2c4 0%,
+    #37a153 70%,
+    #0d3816 100%
+  );
+  box-shadow:
+    0 0  8px rgba(126,240,196,0.85),
+    0 0 22px rgba(26,142,73,0.55);
 }
 
-.rx-meter {
-  width: 170px;
-  height: 12px;
-}
+.rx-meter { height: 8px; }
 
 .rx-meter .audio-meter-fill {
-  background: linear-gradient(90deg, rgba(255, 177, 102, 0.4), rgba(18, 213, 255, 0.55));
+  background: linear-gradient(90deg, var(--g1), var(--g2));
 }
 
-.rx-meter.live {
-  border-color: rgba(18, 213, 255, 0.5);
+.rx-meter.live .audio-meter-fill {
+  box-shadow: 0 0 8px rgba(34,197,94,0.35);
 }
 
-.device-led {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(164, 131, 221, 0.6);
-  box-shadow: 0 0 10px rgba(141, 75, 255, 0.6);
-}
-
-.device-led.live {
-  background: rgba(18, 213, 255, 0.9);
-  box-shadow: 0 0 12px rgba(18, 213, 255, 0.8);
-}
-
-.remote-activity {
-  margin: 0;
-  display: inline-flex;
+.battery-status {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
+  gap: 8px;
+  font-size: 0.55rem;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
-  border: 1px solid rgba(141, 75, 255, 0.35);
-  background: rgba(14, 9, 24, 0.86);
-  color: rgba(164, 131, 221, 0.82);
+  color: #9ef7bf;
 }
 
-.remote-activity.live {
-  border-color: rgba(18, 213, 255, 0.65);
-  color: rgba(203, 246, 255, 0.96);
-  box-shadow: 0 0 14px rgba(18, 213, 255, 0.25);
+.battery-label {
+  font-family: var(--font-display), monospace;
+  font-size: 0.52rem;
+  color: #7ef2c4;
 }
 
-.device-state {
-  margin-left: auto;
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  font-weight: 700;
-  color: rgba(164, 131, 221, 0.75);
-}
-
-.device-state.live {
-  color: rgba(18, 213, 255, 0.85);
-}
-
-.connection-dots {
+.battery-shell {
+  position: relative;
+  width: min(100px, 56vw);
+  max-width: 92px;
+  height: 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(34,197,94,0.65);
+  background: linear-gradient(180deg, rgba(7,60,34,0.92), rgba(24,111,56,0.55));
+  box-shadow: inset 0 2px 4px rgba(255,255,255,0.08);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(141, 75, 255, 0.25);
-  background: rgba(14, 9, 24, 0.8);
+  padding: 2px;
+  overflow: hidden;
 }
 
-.connection-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(164, 131, 221, 0.25);
-  box-shadow: inset 0 0 3px rgba(6, 4, 12, 0.7);
+.battery-shell::after {
+  content: "";
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  width: 8px;
+  height: 10px;
+  border-radius: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(180deg, rgba(142,245,185,0.9), rgba(16,84,42,0.9));
+  border: 1px solid rgba(34,197,94,0.8);
+  box-shadow: 0 0 6px rgba(142,245,185,0.65);
 }
 
-.connection-dot.on {
-  background: rgba(18, 213, 255, 0.85);
-  box-shadow: 0 0 10px rgba(18, 213, 255, 0.6);
+.battery-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7ef2c4 0%, #37a153 70%, #124518 100%);
+  transform-origin: left;
+  transform: scaleX(var(--charge, 0));
+  transition: transform 220ms ease;
+  box-shadow: 0 0 10px rgba(63,217,136,0.65);
 }
 
-.stats-grid {
-  display: grid;
-  gap: 6px;
+.battery-value {
+  font-size: 0.58rem;
+  letter-spacing: 0.22em;
+  color: #b4ffdb;
+  font-weight: 700;
 }
 
-.speaker-line,
-.warn-line,
-.error-line {
+
+/* ─── Boutons action (Lien, Quitter) ────────────────────────────── */
+
+.device-actions {
+  display: flex;
+  gap: 5px;
+  transition: opacity 120ms ease;
+}
+
+.device-actions.locked { pointer-events: none; opacity: 0.32; }
+
+.btn-action {
+  flex: 1;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  text-decoration: none;
+  text-align: center;
+  cursor: pointer;
+  color: var(--t2);
+  background: linear-gradient(180deg, var(--b4) 0%, var(--b3) 100%);
+  border: 1px solid var(--b0);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 2px 5px rgba(0,0,0,0.5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 100ms ease;
+}
+
+.btn-action:hover { color: var(--t1); }
+
+/* Bouton retour (état room full) */
+.btn-back {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  padding: 12px;
+  border: 1px solid #0b190b;
+  border-radius: 3px;
+  background: rgba(34,197,94,0.06);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--g2);
+}
+
+/* Unlock audio */
+.btn-unlock {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #0b190b;
+  border-radius: 3px;
+  background: rgba(34,197,94,0.05);
+  font: inherit;
+  font-size: 0.58rem;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--g2);
+  cursor: pointer;
+}
+
+
+/* ─── Messages ──────────────────────────────────────────────────── */
+
+.device-msg {
   margin: 0;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
 }
 
-.speaker-line {
-  font-weight: 600;
-}
+.device-msg.warn  { color: var(--warn); }
+.device-msg.error { color: var(--danger); }
 
-.warn-line {
-  color: #f0a56a;
-}
+/* rétrocompat */
+.error-line { margin: 0; font-size: 0.66rem; color: var(--danger); font-weight: 700; }
+.warn-line  { margin: 0; font-size: 0.66rem; color: var(--warn); }
 
-.error-line {
-  color: var(--danger);
-  font-weight: 600;
-}
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* ═══════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════ */
 
-@keyframes pulse-live {
-  0% {
+@keyframes pulse-ptt {
+  /* ─ 0%/100% : enfoncé au repos (scale 0.97, shadow interne fort) ─ */
+  0%, 100% {
+    transform: scale(0.970) translateY(3px);
     box-shadow:
-      inset 0 -12px 18px rgba(0, 0, 0, 0.25),
-      0 16px 30px rgba(91, 33, 182, 0.5),
-      0 0 28px rgba(18, 213, 255, 0.4);
+      /* Inset accentué — sensation d'enfoncement réel */
+      inset 0  2px 0 rgba(255,255,255,0.18),
+      inset 0  8px 22px rgba(0,0,0,0.58),
+      inset 0  2px 10px rgba(106,255,204,0.22),
+      /* Bague + bord */
+      0 0 0 3px rgba(10,76,37,0.95),
+      0 0 0 5px rgba(0,0,0,0.92),
+      /* Glow — resserré en repos */
+      0 0  8px rgba(102,255,194,0.72),
+      0 0 22px rgba(36,169,108,0.44),
+      0 0 50px rgba(9,59,33,0.22),
+      0 0 90px rgba(6,33,18,0.09),
+      /* Ombre portée réduite (bouton enfoncé → moins de profondeur) */
+      0  3px 10px rgba(0,0,0,0.96);
+  }
+  /* ─ 50% : pic du pulse (glow explosé) ─ */
+  50% {
+    transform: scale(0.965) translateY(4px);
+    box-shadow:
+      inset 0  2px 0 rgba(255,255,255,0.22),
+      inset 0  8px 22px rgba(0,0,0,0.58),
+      inset 0  2px 10px rgba(173,255,221,0.34),
+      0 0 0 3px rgba(6,51,27,0.95),
+      0 0 0 5px rgba(0,0,0,0.92),
+      /* Halos au max */
+      0 0  16px rgba(126,255,196,1.00),
+      0 0  44px rgba(42,182,108,0.84),
+      0 0  88px rgba(19,120,67,0.52),
+      0 0 145px rgba(6,47,26,0.24),
+      0  3px 10px rgba(0,0,0,0.96);
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   TX STATE — cascade d'effets maximaux quand on parle
+   Utilise :has() pour propager l'état du bouton PTT vers le parent
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Texte statut sous le bouton (typewriter) ── */
+.ptt-status-text {
+  font-family: var(--font-display), monospace;
+  font-size: 0.40rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #8ef5b9;
+  text-shadow: 0 0 10px rgba(142,245,185,0.55);
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+  height: 1.1em;
+  clip-path: inset(0 100% 0 0);  /* caché par défaut */
+}
+
+.ptt-status-text.live {
+  animation: tx-typewriter 0.44s linear forwards;
+}
+
+/* Texte sur le bouton PTT pendant TX */
+.ptt-live-text {
+  display: inline-block;
+  animation: ptt-text-in 0.18s ease-out forwards;
+}
+
+/* ── LED verte — dimée pendant TX (focus sur le rouge) ── */
+.device:has(.ptt-button.live) .led-dot.on:not(.tx) {
+  opacity: 0.18;
+  transition: opacity 200ms ease;
+}
+
+/* ── Topstrip : légèrement atténué (attention vers le bas) ── */
+.device:has(.ptt-button.live) .device-topstrip {
+  opacity: 0.68;
+  transition: opacity 250ms ease;
+}
+
+/* ── Actions + RX : très atténuées (focus PTT) ── */
+.device:has(.ptt-button.live) .device-actions {
+  opacity: 0.22;
+  transition: opacity 250ms ease;
+}
+
+.device:has(.ptt-button.live) .rx-band {
+  opacity: 0.30;
+  transition: opacity 250ms ease;
+}
+
+/* ── LED TX : drop-shadow rouge vif ── */
+.led-dot.tx.on {
+  filter: drop-shadow(0 0 4px rgba(239,68,68,0.92));
+}
+
+/* ── LCD : respiration de luminosité ── */
+.device:has(.ptt-button.live) .lcd-screen {
+  animation: lcd-breathe 2.8s ease-in-out infinite;
+}
+
+/* ── LCD scanlines : défilement lent animé ── */
+.device:has(.ptt-button.live) .lcd-screen::after {
+  animation: lcd-scanlines-move 4s linear infinite;
+}
+
+/* ── LCD fréquence : micro-glitch rare ── */
+.device:has(.ptt-button.live) .lcd-freq {
+  animation: lcd-micro-glitch 9s linear infinite;
+}
+
+/* ── Puits : fond sombre + halos verdoyants ── */
+.ptt-well:has(.ptt-button.live) {
+  background: radial-gradient(circle at 40% 35%, #0a3c1c, #010904 72%);
+  box-shadow:
+    inset 0 8px 28px rgba(0,0,0,0.98),
+    inset 0 4px 14px rgba(34,197,94,0.45),
+    inset 0 -2px 0 rgba(118,255,194,0.18),
+    0 0  22px rgba(17,138,78,0.55),
+    0 0  60px rgba(7,71,37,0.32),
+    0 0 110px rgba(5,31,16,0.25),
+    0 1px 3px rgba(255,255,255,0.02);
+}
+
+/* ── Anneaux TX en expansion ── */
+.ptt-well:has(.ptt-button.live)::before,
+.ptt-well:has(.ptt-button.live)::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: tx-ring 0.95s cubic-bezier(0.20, 1, 0.36, 1) infinite;
+}
+
+.ptt-well:has(.ptt-button.live)::before {
+  border: 2px solid rgba(94,225,156,0.65);
+}
+
+.ptt-well:has(.ptt-button.live)::after {
+  border: 2px solid rgba(64,168,105,0.38);
+  animation-delay: 0.48s;
+}
+
+/* ── Panneau PTT : bordure + halo verdoyant ── */
+.ptt-zone:has(.ptt-button.live) {
+  border-color: rgba(11,112,57,0.80);
+  box-shadow:
+    inset 0 5px 18px rgba(0,0,0,0.82),
+    inset 0 1px 0 rgba(255,255,255,0.015),
+    0 0 0  1px rgba(11,112,57,0.50),
+    0 0  20px rgba(14,135,72,0.38),
+    0 0  55px rgba(5,48,23,0.22);
+}
+
+/* ── Corps du device : halo verdoyant ambiant ── */
+.device:has(.ptt-button.live) {
+  box-shadow:
+    inset 0  1px 0 rgba(255,255,255,0.09),
+    inset 0 -2px 0 rgba(0,0,0,0.55),
+    inset  3px 0 0 rgba(255,255,255,0.035),
+    inset -3px 0 0 rgba(0,0,0,0.38),
+    0 22px 64px rgba(0,0,0,0.88),
+    0  6px 18px rgba(0,0,0,0.60),
+    0  2px  4px rgba(0,0,0,0.85),
+    /* Halo TX ambiant sur la table */
+    0  0   70px rgba(14,118,58,0.30),
+    0  0  150px rgba(6,58,27,0.14);
+}
+
+/* ── LCD : teinte chaude discrète TX ── */
+.device:has(.ptt-button.live) .lcd-screen {
+  box-shadow:
+    inset 0 0 40px rgba(0,0,0,0.88),
+    inset 0 0 16px rgba(22,190,110,0.18),
+    0 0 0 1px rgba(0,0,0,0.9),
+    0 2px 8px rgba(0,0,0,0.7);
+}
+
+/* ── Grille haut-parleur : lueur TX ── */
+.device:has(.ptt-button.live) .speaker-holes {
+  box-shadow:
+    inset 0 3px 10px rgba(0,0,0,0.80),
+    inset 0 -1px 0 rgba(14,118,58,0.08),
+    0 0 8px rgba(29,152,84,0.22);
+}
+
+
+/* ── Nouvelles animations ── */
+
+@keyframes tx-ring {
+  0%   { transform: scale(1.00); opacity: 0.90; }
+  100% { transform: scale(1.60); opacity: 0.00; }
+}
+
+/* Micro-vibration (translate = propriété CSS indépendante de transform) */
+@keyframes tx-vibrate {
+  0%   { translate:  0.00px  0.00px; }
+  25%  { translate:  0.20px -0.08px; }
+  50%  { translate: -0.16px  0.14px; }
+  75%  { translate:  0.12px  0.20px; }
+}
+
+/* Point chaud central */
+@keyframes heat-core {
+  0%, 100% { opacity: 0.30; transform: scale(0.88); }
+  50%       { opacity: 0.55; transform: scale(1.12); }
+}
+
+/* Scan horizontal mètre TX */
+@keyframes meter-scan-sweep {
+  from { transform: translateX(-200%); }
+  to   { transform: translateX( 200%); }
+}
+
+/* LCD : respiration lumineuse */
+@keyframes lcd-breathe {
+  0%, 100% { filter: brightness(1.00); }
+  50%       { filter: brightness(1.10); }
+}
+
+/* LCD : scanlines qui descendent */
+@keyframes lcd-scanlines-move {
+  from { background-position-y: 0px; }
+  to   { background-position-y: 3px; }
+}
+
+/* LCD : micro-glitch rare (toutes les ~9s) */
+@keyframes lcd-micro-glitch {
+  0%, 90%, 100%  { transform: none; opacity: 1.00; }
+  91%            { transform: translateX(-1.5px); opacity: 0.86; }
+  92%            { transform: translateX(1.2px) skewX(0.5deg); opacity: 0.93; }
+  93%            { transform: translateX(-0.5px); opacity: 0.97; }
+  94%            { transform: none; opacity: 1.00; }
+}
+
+/* Typewriter "TRANSMISSION EN COURS" */
+@keyframes tx-typewriter {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0   0% 0 0); }
+}
+
+/* Texte sur bouton PTT : fade-scale in */
+@keyframes ptt-text-in {
+  from { opacity: 0; transform: scale(0.78); }
+  to   { opacity: 1; transform: scale(1.00); }
+}
+
+@keyframes led-tx-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0  6px rgba(34,197,94,0.92),
+      0 0 14px rgba(34,197,94,0.65),
+      0 0 30px rgba(18,112,60,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.45);
   }
   50% {
     box-shadow:
-      inset 0 -12px 18px rgba(0, 0, 0, 0.25),
-      0 20px 40px rgba(18, 213, 255, 0.45),
-      0 0 32px rgba(18, 213, 255, 0.6);
-  }
-  100% {
-    box-shadow:
-      inset 0 -12px 18px rgba(0, 0, 0, 0.25),
-      0 16px 30px rgba(91, 33, 182, 0.5),
-      0 0 28px rgba(18, 213, 255, 0.4);
+      0 0 10px rgba(142,245,185,1.00),
+      0 0 26px rgba(34,197,94,0.80),
+      0 0 55px rgba(14,99,53,0.42),
+      inset 0 1px 0 rgba(255,255,255,0.60);
   }
 }
 
-@media (max-width: 640px) {
-  .ptt-button {
-    width: min(170px, 74vw);
-    font-size: 0.78rem;
-  }
-
-  .hero {
-    max-width: 100%;
-  }
+@keyframes state-tx-blink {
+  0%, 100% { opacity: 1.00; }
+  50%       { opacity: 0.42; }
 }
 
-@media (max-width: 420px) {
-  .app-shell {
-    gap: 12px;
-    padding: 12px 12px 16px;
-  }
 
-  .retro-panel {
-    padding: 10px;
-  }
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════ */
 
-  .hero {
-    gap: 12px;
-  }
+@media (max-width: 380px) {
+  .device { width: 100%; border-radius: 0; }
+  .shell  { padding: 0; align-items: stretch; }
+  .device-antenna { display: none; }
+  .speaker-holes  { height: 40px; }
+  .mic-holes      { height: 26px; }
+  .ptt-well       { width: min(172px, 68vw); padding: 12px; }
+}
 
-  .talkie-face {
-    padding: 10px;
-  }
-
-  .ptt-button {
-    width: min(150px, 70vw);
-    font-size: 0.72rem;
-  }
-
-  .audio-meter {
-    width: 140px;
-    height: 14px;
-  }
-
-  .rx-meter {
-    width: 140px;
-    height: 10px;
-  }
-
-  .text-input {
-    padding: 6px 8px;
-  }
+@media (max-height: 680px) {
+  .speaker-holes { height: 36px; }
+  .mic-holes     { height: 24px; }
+  .lcd-screen    { margin: 8px 12px; padding: 9px 12px 11px; }
+  .lcd-freq      { font-size: 2.0rem; }
+  .device-panel  { gap: 7px; padding: 6px 12px 10px; }
+  .ptt-well      { width: min(160px, 62vw); padding: 11px; }
+  .ptt-zone      { padding: 12px 12px 10px; gap: 10px; }
+  .device-antenna { height: 32px; margin-top: -32px; }
 }

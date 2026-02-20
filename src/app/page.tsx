@@ -4,22 +4,21 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const PIN_LENGTH = 4;
-const PIN_KEY = "talky_pin";
+const PIN_KEY    = "talky_pin";
 
 function createPin(): string {
-  const value = Math.floor(Math.random() * 10000);
-  return value.toString().padStart(PIN_LENGTH, "0");
+  return Math.floor(Math.random() * 10000).toString().padStart(PIN_LENGTH, "0");
 }
 
-function normalizePin(value: string): string {
-  return value.replaceAll(/\D/g, "").slice(0, PIN_LENGTH);
+function normalizePin(v: string): string {
+  return v.replaceAll(/\D/g, "").slice(0, PIN_LENGTH);
 }
 
 export default function HomePage() {
   const router = useRouter();
   const [roomInput, setRoomInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [localPin, setLocalPin] = useState<string | null>(null);
+  const [error,     setError    ] = useState<string | null>(null);
+  const [localPin,  setLocalPin ] = useState<string | null>(null);
 
   const canJoin = useMemo(() => roomInput.trim().length === PIN_LENGTH, [roomInput]);
 
@@ -30,14 +29,13 @@ export default function HomePage() {
       setRoomInput(saved);
       return;
     }
-
-    const newPin = createPin();
-    window.localStorage.setItem(PIN_KEY, newPin);
-    setLocalPin(newPin);
-    setRoomInput(newPin);
+    const pin = createPin();
+    window.localStorage.setItem(PIN_KEY, pin);
+    setLocalPin(pin);
+    setRoomInput(pin);
   }, []);
 
-  const handleCreateRoom = () => {
+  const handleCreate = () => {
     const pin = localPin ?? createPin();
     if (!localPin) {
       window.localStorage.setItem(PIN_KEY, pin);
@@ -47,71 +45,87 @@ export default function HomePage() {
     router.push(`/r/${pin}`);
   };
 
-  const handleJoinRoom = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const roomId = roomInput.trim();
-
-    if (roomId.length !== PIN_LENGTH) {
-      setError(`PIN invalide: ${PIN_LENGTH} chiffres.`);
-      return;
-    }
-
+  const handleJoin = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const id = roomInput.trim();
+    if (id.length !== PIN_LENGTH) { setError("FREQ INVALIDE"); return; }
     setError(null);
-    router.push(`/r/${roomId}`);
+    router.push(`/r/${id}`);
   };
 
   return (
-    <main className="app-shell retro">
-      <header className="topbar retro-panel">
-        <span className="brand-mark">TALKY</span>
-        <span className="topbar-sub">RETRO LINK MODE</span>
-      </header>
+    <main className="shell">
+      <div className="device">
 
-      <section className="hero reveal retro-panel">
-        <div className="screen">
-          <p className="eyebrow">TALKIE</p>
-          <h1 className="brand">Talky</h1>
-          <p className="subtle">P2P mesh, PIN local 4 chiffres.</p>
+        {/* Antenne */}
+        <div className="device-antenna" aria-hidden="true">
+          <div className="antenna-shaft" />
         </div>
 
-        <div className="hero-actions">
-          <div className="talkie-face compact">
-            <div className="speaker-grill" aria-hidden="true" />
-            <div className="knob-row" aria-hidden="true">
-              <span className="knob">CH 1</span>
-              <span className="knob">VOL</span>
-              <span className="knob">BAT</span>
-            </div>
+        {/* Marque + LEDs */}
+        <div className="device-topstrip">
+          <span className="brand-text">TALKY</span>
+          <div className="led-row" aria-hidden="true">
+            <span className="led-dot on" />
+            <span className="led-dot" />
           </div>
+        </div>
 
-          <button type="button" className="action-btn" onClick={handleCreateRoom}>
-            Lancer room
+        {/* Grille haut-parleur */}
+        <div className="speaker-holes" aria-hidden="true" />
+
+        {/* Écran LCD — PIN affiché comme fréquence */}
+        <div className="lcd-screen">
+          <span className="lcd-label">CANAL</span>
+          <div className="lcd-freq">
+            <span className="lcd-prefix">462.</span>
+            <span className="lcd-pin">{roomInput || "0000"}</span>
+          </div>
+          <span className="lcd-sub">
+            {localPin ? `MEM\u00a0${localPin}\u00a0\u00b7\u00a0SIMPLEX` : "MHz\u00a0\u00b7\u00a0SIMPLEX"}
+          </span>
+        </div>
+
+        {/* Contrôles */}
+        <div className="device-panel">
+
+          {/* Bouton principal */}
+          <button type="button" className="btn-launch" onClick={handleCreate}>
+            LANCER
           </button>
 
-          <form className="controls" onSubmit={handleJoinRoom}>
-            <label htmlFor="room-id" className="subtle">
-              PIN (4 chiffres)
-            </label>
-            <input
-              id="room-id"
-              className="text-input"
-              type="text"
-              value={roomInput}
-              onChange={(event) => setRoomInput(normalizePin(event.target.value))}
-              placeholder="0000"
-              spellCheck={false}
-              autoComplete="off"
-              inputMode="numeric"
-            />
-            <button type="submit" className="ghost-btn" disabled={!canJoin}>
-              Rejoindre
-            </button>
+          <div className="panel-sep" aria-hidden="true" />
+
+          {/* Syntonisation */}
+          <form className="tune-form" onSubmit={handleJoin}>
+            <span className="tune-label">SYNTONISER</span>
+            <div className="tune-row">
+              <span className="tune-prefix">462.</span>
+              <input
+                id="room-id"
+                className="tune-input"
+                type="text"
+                value={roomInput}
+                onChange={(e) => setRoomInput(normalizePin(e.target.value))}
+                placeholder="0000"
+                spellCheck={false}
+                autoComplete="off"
+                inputMode="numeric"
+              />
+              <button type="submit" className="tune-btn" disabled={!canJoin}>
+                &#x21B5;
+              </button>
+            </div>
           </form>
 
-          {localPin && <p className="subtle">PIN local: {localPin}</p>}
-          {error && <p className="error-line">{error}</p>}
+          {error && <p className="device-msg error">{error}</p>}
+
         </div>
-      </section>
+
+        {/* Trous microphone */}
+        <div className="mic-holes" aria-hidden="true" />
+
+      </div>
     </main>
   );
 }
